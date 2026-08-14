@@ -193,6 +193,33 @@ body.modern .vtab{border-color:var(--line2)}
   box-shadow:0 0 0 9999px rgba(0,0,0,.28),0 2px 10px rgba(0,0,0,.6)}
 .cell.mag .vbox{display:block}
 .cell .vbox.grab{cursor:grabbing}
+/* 배율 조절 — 확대 영역 바로 아래에 붙는다(자리가 없으면 위로) */
+.cell .zctl{display:none;position:absolute;z-index:4;align-items:center;gap:6px;
+  padding:5px 8px;border-radius:9px;background:rgba(0,0,0,.72);
+  border:1px solid rgba(255,255,255,.18);box-shadow:0 3px 12px rgba(0,0,0,.5)}
+.cell.mag .zctl{display:flex}
+.cell .zctl input{width:104px;accent-color:var(--acc);margin:0}
+.cell .zctl button{width:24px;height:24px;display:grid;place-items:center;padding:0;
+  background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);
+  border-radius:6px;color:#fff;font-size:13px;cursor:pointer;line-height:1}
+.cell .zctl button:hover{background:rgba(255,255,255,.3)}
+.cell .zctl span{font-size:11px;font-weight:700;color:#fff;min-width:30px;
+  text-align:right;font-variant-numeric:tabular-nums}
+/* 명암 조절 — 상단 ◐ 를 누르면 열린다 */
+/* 스킨마다 상단바 높이가 달라 버튼 자리를 읽어 붙인다(아래 onclick) */
+#dimPop{position:fixed;right:10px;top:calc(48px + var(--st));z-index:80;display:none;
+  width:224px;padding:12px;border-radius:12px;background:var(--panel);
+  border:1px solid var(--line2);box-shadow:0 10px 30px rgba(0,0,0,.5)}
+#dimPop.on{display:block}
+body.reimagined #dimPop{background:rgba(20,22,28,.96);backdrop-filter:blur(12px)}
+#dimPop .row{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px}
+#dimPop b{font-variant-numeric:tabular-nums;color:var(--acc)}
+#dimPop .hint{font-size:11px;color:var(--dim)}
+#dimPop button{padding:6px 11px;background:var(--panel2);border:1px solid var(--line2);
+  border-radius:8px;color:var(--fg);font-size:12px;cursor:pointer}
+#dimRange{width:100%;margin:10px 0 8px;accent-color:var(--acc)}
+#bDim{font-size:16px;line-height:1}
+body.classic #dimPop{border:1px solid #888;border-radius:0}
 #toast{position:fixed;left:50%;top:calc(14px + var(--st));transform:translateX(-50%);
   z-index:1200;padding:8px 16px;border-radius:999px;background:rgba(0,0,0,.82);
   color:#fff;font-size:13px;font-weight:700;pointer-events:none;
@@ -396,8 +423,15 @@ body.classic .sheet-in{border:2px solid #888}
     <h1>경부선 북천안~청주</h1>
     <span class="live" id="live">—</span>
     <span class="sp"></span>
+    <button class="tbtn" id="bDim" title="명암 (W / E)">◐</button>
     <button class="tbtn" id="bSkin">개선 UI</button>
     <button class="tbtn" id="bSet">설정</button>
+  </div>
+  <!-- 명암 조절 — 단축키 W/E 와 같은 값을 쓴다 -->
+  <div id="dimPop">
+    <div class="row"><span>명암</span><b id="dimVal">100%</b></div>
+    <input type="range" id="dimRange" min="0.6" max="1.8" step="0.05" value="1">
+    <div class="row"><button id="dimReset">기본값</button><span class="hint">단축키 W · E</span></div>
   </div>
 
   <div id="main">
@@ -830,6 +864,7 @@ function makeCell(o){
     <button class="rf" data-reload="0" title="이 화면만 다시 연결"><span class="ic">↻</span></button>
     <button class="x" data-close="0">✕</button>
     <div class="vbox"></div>
+    <div class="zctl"><button data-zs="-1">−</button><input type="range" min="1.2" max="6" step="0.2"><span></span><button data-zs="1">＋</button></div>
     <div class="bdg"></div>
     <div class="ov">연결 중…</div>`;
   /* 끊김 감지는 셀을 만들 때 딱 한 번만 건다.
@@ -857,6 +892,18 @@ function applyMag(o){
     const s=100/o.mag;
     box.style.width=s+'%'; box.style.height=s+'%';
     box.style.left=((o.mx*100)-s/2)+'%'; box.style.top=((o.my*100)-s/2)+'%';
+    /* 배율 막대를 그 네모 바로 아래에 붙인다. 아래가 좁으면 위로 올린다. */
+    const ct=o.cell.querySelector('.zctl');
+    if(ct){
+      const r=o.cell.getBoundingClientRect();
+      const bTop=(o.my-0.5/o.mag)*r.height, bBot=(o.my+0.5/o.mag)*r.height;
+      const h=34, below=bBot+6+h<=r.height-4;
+      ct.style.top=(below?bBot+6:Math.max(4,bTop-6-h))+'px';
+      ct.style.left='50%'; ct.style.transform='translateX(-50%)';
+      const inp=ct.querySelector('input'), lab=ct.querySelector('span');
+      if(inp && +inp.value!==o.mag) inp.value=o.mag;
+      if(lab) lab.textContent=o.mag.toFixed(1)+'x';
+    }
   }
 }
 function setMag(i,on){
@@ -865,6 +912,22 @@ function setMag(i,on){
   if(on && o.mx==null){ o.mx=0.5; o.my=0.5; }
   applyMag(o);
 }
+/* 배율 막대 — 더 당기거나 되돌린다. 화면마다 값이 따로 유지된다. */
+function setMagLevel(o,v){
+  o.mag=Math.min(6, Math.max(1.2, Math.round(v*5)/5));
+  applyMag(o);
+}
+$('#grid').addEventListener('input',e=>{
+  const inp=e.target.closest('.zctl input'); if(!inp) return;
+  const o=S.open[+inp.closest('.cell').dataset.i]; if(!o||o.mag<=1) return;
+  setMagLevel(o, +inp.value);
+});
+$('#grid').addEventListener('click',e=>{
+  const b=e.target.closest('[data-zs]'); if(!b) return;
+  e.stopPropagation();
+  const o=S.open[+b.closest('.cell').dataset.i]; if(!o||o.mag<=1) return;
+  setMagLevel(o, o.mag + (+b.dataset.zs)*0.4);
+},true);
 /* 네모를 끌어 보는 지점을 옮긴다 */
 $('#grid').addEventListener('pointerdown',e=>{
   const box=e.target.closest('.vbox'); if(!box) return;
@@ -1099,7 +1162,7 @@ $('#grid').onclick=e=>{
 $('#grid').addEventListener('dblclick',e=>{
   /* 버튼을 두 번 누르면 click 두 번에 이어 dblclick 까지 와서
      크게 보기가 열렸다 닫혔다 다시 열린다 — 버튼 위에서는 무시한다 */
-  if(e.target.closest('[data-zoom],[data-close],[data-reload],[data-mag],.vbox')) return;
+  if(e.target.closest('[data-zoom],[data-close],[data-reload],[data-mag],.vbox,.zctl')) return;
   const c=e.target.closest('.cell');
   if(c) setZoom(+c.dataset.i);
 });
@@ -1241,13 +1304,29 @@ function toast(msg){
   t.textContent=msg; t.classList.add('on');
   clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('on'),1100);
 }
-function setContrast(v){
-  S.contrast=Math.min(1.8, Math.max(0.6, Math.round(v*10)/10));
+/* 단축키(W·E)와 상단 ◐ 슬라이더가 같은 값을 쓴다 — 어느 쪽으로 바꿔도 함께 움직인다 */
+function setContrast(v,quiet){
+  S.contrast=Math.min(1.8, Math.max(0.6, Math.round(v*20)/20));
   document.documentElement.style.setProperty('--vfx', S.contrast);
   LS.set('contrast', S.contrast);
-  toast('명암 '+Math.round(S.contrast*100)+'%');
+  const pct=Math.round(S.contrast*100)+'%';
+  const r=$('#dimRange'), lab=$('#dimVal');
+  if(r && +r.value!==S.contrast) r.value=S.contrast;
+  if(lab) lab.textContent=pct;
+  if(!quiet) toast('명암 '+pct);
 }
-setContrast(LS.get('contrast',1));
+setContrast(LS.get('contrast',1), true);
+$('#bDim').onclick=e=>{
+  e.stopPropagation();
+  const p=$('#dimPop'), b=e.currentTarget.getBoundingClientRect();
+  p.style.top=(b.bottom+6)+'px';                       // 스킨마다 상단바 높이가 다르다
+  p.style.right=Math.max(8, innerWidth-b.right)+'px';
+  p.classList.toggle('on');
+};
+$('#dimRange').oninput=e=>setContrast(+e.target.value, true);
+$('#dimReset').onclick=()=>setContrast(1);
+$('#dimPop').onclick=e=>e.stopPropagation();
+document.addEventListener('click',()=>$('#dimPop').classList.remove('on'));
 document.addEventListener('keydown',e=>{
   if(e.ctrlKey||e.altKey||e.metaKey) return;
   const tg=e.target;                         // 입력 중에는 건드리지 않는다
