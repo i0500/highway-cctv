@@ -258,10 +258,14 @@ body.classic .sheet-in{border:2px solid #888}
   .gridrow{flex:0 0 auto;justify-content:flex-start}
   /* 영상은 16:9 라 4:3 칸에 담으면 아래가 남는다.
      영상을 위로 붙여 그 남는 검은 자리에 조작줄을 넣는다 — 영상을 가리지 않는다. */
-  /* 폭은 열 수로 고정한다 — 마지막 줄에 한 칸만 남아도 크기가 같다 */
+  /* 폭은 열 수로 고정한다 — 줄 끝에 한 칸만 남아도 크기가 같다 */
   .cell{aspect-ratio:4/3;
     flex:0 0 calc((100% - (var(--cols,2) - 1) * var(--gp,2px)) / var(--cols,2))}
+  /* 맨 윗줄이 한 칸뿐일 때만 가로를 다 쓴다 — 홀수일 때의 큰 화면 */
+  .gridrow:first-child > .cell:only-child{flex:0 0 100%}
   body.reimagined #grid{--gp:0px}
+  /* 설정은 ☰ 안에도 있다 — 좁은 화면에서는 상단 자리를 이름에 내준다 */
+  #bSet{display:none}
   .cell video{object-position:top}
   #grid.zoomed{height:100%}
   #grid.zoomed .cell.zoom{aspect-ratio:auto;height:100%}
@@ -277,8 +281,9 @@ body.classic .sheet-in{border:2px solid #888}
   #grid .cell .zm{left:5px}
   #grid .cell .rf{left:35px}
   #grid .cell .x{left:65px}
-  /* 이름 뒤에만 옅게 깔아 어떤 배경에서도 읽히게 한다 — 글자 길이만큼만 */
-  #grid .cell .ttl{top:auto;bottom:4px;left:96px;right:auto;height:26px;
+  /* 이름 뒤에만 옅게 깔아 어떤 배경에서도 읽히게 한다 — 글자 길이만큼만.
+     버튼은 왼쪽, 이름은 오른쪽 끝에 붙인다 */
+  #grid .cell .ttl{top:auto;bottom:4px;left:auto;right:5px;height:26px;
     max-width:calc(100% - 101px);
     display:flex;align-items:center;padding:0 7px;border:none;
     background:rgba(0,0,0,.42);border-radius:7px;
@@ -291,7 +296,7 @@ body.classic .sheet-in{border:2px solid #888}
   #grid.zoomed .cell.zoom .zm{left:8px}
   #grid.zoomed .cell.zoom .rf{left:52px}
   #grid.zoomed .cell.zoom .x{left:96px}
-  #grid.zoomed .cell.zoom .ttl{left:142px;bottom:8px;height:38px;font-size:14px;
+  #grid.zoomed .cell.zoom .ttl{left:auto;right:8px;bottom:8px;height:38px;font-size:14px;
     max-width:calc(100% - 150px);padding:0 11px;border-radius:9px}
 }
 </style>
@@ -620,9 +625,18 @@ function rowsFor(n){
   /* 좁은 화면에서는 4~5열로 나누면 칸 폭이 100px 도 안 돼 버튼도 이름도 못 넣는다.
      세로로 긴 화면이므로 2열(많으면 3열)로 하고 아래로 스크롤하게 둔다. */
   if(narrow()){
-    const x = n<=1 ? 1 : n<=12 ? 2 : 3;
-    const rows=Math.ceil(n/x), out=[]; let left=n;
-    for(let i=0;i<rows;i++){ const c=Math.min(x,Math.ceil(left/(rows-i))); out.push(c); left-=c; }
+    /* 2열로 나누면 홀수일 때 한 칸이 남는다.
+       남는 칸을 맨 끝에 두면 뜬금없이 혼자 커 보이므로 맨 앞에 크게 놓는다 —
+       큰 화면 하나에 작은 화면 여럿이 붙는 익숙한 배치가 된다. */
+    if(n<=1) return [1];
+    if(n<=12){
+      const out=[]; let left=n;
+      if(n%2){ out.push(1); left--; }
+      while(left>0){ out.push(2); left-=2; }
+      return out;
+    }
+    const rows=Math.ceil(n/3), out=[]; let left=n;
+    for(let i=0;i<rows;i++){ const c=Math.min(3,Math.ceil(left/(rows-i))); out.push(c); left-=c; }
     return out;
   }
   if(SPECIAL[n]) return SPECIAL[n];
