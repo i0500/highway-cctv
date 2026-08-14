@@ -544,6 +544,60 @@ function bufFor(){
 /* 안 보이는 동안 재생을 세워둔 상태인지 — 아래 감시 타이머들이 이 값을 본다.
    (참조하는 곳보다 반드시 먼저 선언해야 한다) */
 let dormant=false, sleepTimer=null;
+
+/* ── 진단 기록 ────────────────────────────────────────
+   24시간 켜 두는 화면이라 '지금 잘 나오는지'만으로는 부족하다.
+   끊김·재연결·지연을 계속 쌓아 두었다가 콘솔에서 확인한다.
+   창(메인/보조)마다 따로 쌓이므로 각 창의 콘솔에서 부르면 된다.
+     cctvDiag()      요약 — 화면별 끊김·재연결·지연·메모리
+     cctvDiag.log()  일어난 일 목록
+     cctvDiag.csv()  표로 붙여넣기 좋은 형태 */
+const DBG={
+  t0:Date.now(), buf:[], snaps:[],
+  on:(()=>{try{return localStorage.getItem(PFX+'dbg')==='1'
+    || new URLSearchParams(location.search).get('debug')==='1'}catch(_){return false}})(),
+  add(tag,msg,extra){
+    const e={t:Date.now()-this.t0, tag, msg, ...(extra||{})};
+    this.buf.push(e); if(this.buf.length>2000) this.buf.shift();
+    if(this.on) console.log(`[cctv ${(e.t/1000).toFixed(1)}s] ${tag} ${msg}`, extra||'');
+  }
+};
+function diagRow(o,i){
+  const v=o.cell?.querySelector('video');
+  const q=v&&v.getVideoPlaybackQuality?v.getVideoPlaybackQuality():null;
+  let lag=null,buf=0;
+  try{ const e=edgeOf(o.hls);
+    if(e!=null&&isFinite(e)&&v&&v.currentTime>0) lag=+(e-v.currentTime).toFixed(2); }catch(_){}
+  try{ for(let k=0;k<v.buffered.length;k++)
+    if(v.buffered.start(k)<=v.currentTime&&v.currentTime<=v.buffered.end(k))
+      buf=+(v.buffered.end(k)-v.currentTime).toFixed(2); }catch(_){}
+  return {번호:i+1, 이름:o.cam.n, 지연:lag, 버퍼:buf,
+    소스배속:o._rate!=null?+o._rate.toFixed(2):null, 느림:!!o.slow,
+    받기ms:o.lastMs??null, 끊김:o.nStall||0, 재연결:o.nReload||0,
+    끊긴시간초:+((o.stallMs||0)/1000).toFixed(1),
+    버린프레임:q?q.droppedVideoFrames:null, 총프레임:q?q.totalVideoFrames:null,
+    멈춤:v?v.paused:null};
+}
+window.cctvDiag=function(){
+  const m=performance.memory;
+  const s={창:SUB?'보조':'메인', 가동:(((Date.now()-DBG.t0)/60000).toFixed(1))+'분',
+    화면수:S.open.length, 모드:S.mode, 버퍼목표:bufFor(),
+    총끊김:S.open.reduce((a,o)=>a+(o.nStall||0),0),
+    총재연결:S.open.reduce((a,o)=>a+(o.nReload||0),0),
+    라이브복귀:Tune.seeks||0, 버퍼상향:Tune.stalls||0,
+    JS메모리MB:m?+(m.usedJSHeapSize/1048576).toFixed(1):'-',
+    한계MB:m?+(m.jsHeapSizeLimit/1048576).toFixed(0):'-'};
+  console.log('%c CCTV 진단 ','background:#ff6b35;color:#fff;font-weight:700',s);
+  console.table(S.open.map(diagRow));
+  return s;
+};
+window.cctvDiag.log=n=>{ console.table(DBG.buf.slice(-(n||60))); return DBG.buf.length+'건'; };
+window.cctvDiag.snaps=()=>{ console.table(DBG.snaps); return DBG.snaps.length+'개'; };
+window.cctvDiag.csv=()=>DBG.snaps.map(r=>Object.values(r).join(',')).join('\n');
+window.cctvDiag.reset=()=>{ DBG.buf=[]; DBG.snaps=[]; DBG.t0=Date.now();
+  S.open.forEach(o=>{o.nStall=0;o.nReload=0;o.stallMs=0;}); return '초기화'; };
+window.cctvDiag.verbose=v=>{ DBG.on=v!==false;
+  try{localStorage.setItem(PFX+'dbg',DBG.on?'1':'0')}catch(_){} return DBG.on?'로그 켬':'로그 끔'; };
 function hlsConfig(){
   const m=modeCfg(), b=bufFor();
   return {
@@ -591,8 +645,22 @@ function applyTune(){
 /* 끊김 한 번에 바로 버퍼를 올리지 않는다.
    네트워크는 원래 가끔 흔들리며, 그때마다 올리면 지연이 계속 누적된다.
    12초 안에 3번 이상 끊길 때만 '정말 부족한 것'으로 보고 올린다. */
-function onStall(){
+function onStall(e){
   const m=modeCfg(), now=Date.now();
+  /* 끊긴 화면과 끊긴 시간을 남긴다 — 어느 카메라가 얼마나 자주 멈추는지 본다 */
+  const cell=e&&e.target&&e.target.closest?e.target.closest('.cell'):null;
+  if(cell){
+    const o=S.open[+cell.dataset.i];
+    /* 처음 붙을 때의 버퍼링은 끊김이 아니다 — 한 번이라도 재생된 뒤부터 센다 */
+    if(o && o._started){
+      o.nStall=(o.nStall||0)+1; o._stallAt=now;
+      const v=e.target;
+      if(!o._playOnce){ o._playOnce=true;
+        v.addEventListener('playing',()=>{ if(o._stallAt){ o.stallMs=(o.stallMs||0)+(Date.now()-o._stallAt); o._stallAt=0; } });
+      }
+      DBG.add('끊김', o.cam.n, {번호:(+cell.dataset.i)+1, 누적:o.nStall});
+    }
+  }
   Tune.sinceStall=0;
   if(!m.up) return;                                  // 고정 모드는 올리지 않음
   Tune.recent=Tune.recent.filter(t=>now-t<12000);
@@ -709,6 +777,7 @@ setInterval(()=>{
     if(behind>worstBehind){ worst={o,v,edge}; worstBehind=behind; }
   });
   if(!worst) return;
+  DBG.add('라이브복귀', worst.o.cam.n, {뒤처짐:+worstBehind.toFixed(2)});
   const target=Math.max(0, worst.edge-Math.max(1.0, bufFor()*0.8));
   try{
     const buf=worst.v.buffered;
@@ -920,6 +989,7 @@ function bind(o){
     }catch(_){}
   });
   hls.on(Hls.Events.ERROR,(_e,d)=>{
+    if(d.fatal) DBG.add('오류', o.cam.n, {종류:d.type, 상세:d.details});
     if(!d.fatal) return;
     /* 복구 시도는 횟수를 제한한다. 무제한으로 돌리면 정말 복구 불가능한 상황
        (여러 대 동시 재생으로 디코더가 모자란 경우 등)에서 오류도 안 뜬 채
@@ -932,7 +1002,7 @@ function bind(o){
     ov.classList.remove('hide');
     ov.textContent='재생할 수 없습니다 — ↻ 를 눌러 다시 시도하세요';
   });
-  hls.on(Hls.Events.FRAG_BUFFERED,()=>{ o._mediaErr=0; o._tries=0; }); // 정상 재생되면 초기화
+  hls.on(Hls.Events.FRAG_BUFFERED,()=>{ o._mediaErr=0; o._tries=0; o._started=1; }); // 정상 재생되면 초기화
   hls.loadSource(o.cam.u); hls.attachMedia(v);
 }
 
@@ -1035,8 +1105,10 @@ $('#grid').addEventListener('dblclick',e=>{
 });
 
 /* 한 화면만 다시 연결 — 전체를 끊지 않는다 */
-function reloadOne(i, btn){
+function reloadOne(i, btn, why){
   const o=S.open[i]; if(!o) return;
+  o.nReload=(o.nReload||0)+1;
+  DBG.add('재연결', o.cam.n, {번호:i+1, 사유:why||'수동', 누적:o.nReload});
   if(btn){ btn.classList.add('spin'); setTimeout(()=>btn.classList.remove('spin'),1200); }
   const ov=o.cell?.querySelector('.ov');
   if(ov){ ov.classList.remove('hide'); ov.textContent='다시 연결 중…'; }
@@ -1089,12 +1161,12 @@ function healTick(){
       v.play().catch(()=>{});
       o._lastT=-1;
       o._dead=(o._dead||0)+1;
-      if(o._dead>=5) score=o._dead*2;  // 10초 넘게 눌러도 그대로면
+      if(o._dead>=5){ score=o._dead*2; o._deadHit=1; }  // 10초 넘게 눌러도 그대로면
     } else {
       o._dead=0;
       if(v.readyState<2){              // 재생 시작조차 못 한 채 머무는 중
         o._cold=(o._cold||0)+1;
-        if(o._cold>=8) score=o._cold;
+        if(o._cold>=8){ score=o._cold; o._coldHit=1; }
       } else {
         o._cold=0;
         /* 딱 멈춘 것만 세면 2초에 0.1초씩 기어가는 화면을 정상으로 넘겨버린다.
@@ -1115,8 +1187,9 @@ function healTick(){
   if(worst){
     const {o,i}=worst;
     o._cold=0; o._stuck=0; o._dead=0; o._lastTry=now; o._tries=(o._tries||0)+1;
-    onStall();                         // 버퍼도 함께 늘린다(4초 내 중복은 무시됨)
-    reloadOne(i, o.cell?.querySelector('.rf'));
+    setTimeout(()=>{o._deadHit=0;o._coldHit=0;},0);
+    const why = o._deadHit ? '눌러도 안 살아남' : (o._coldHit ? '재생 못 시작' : '제자리');
+    reloadOne(i, o.cell?.querySelector('.rf'), why);
   }
 }
 setInterval(healTick, 2000);
@@ -1420,14 +1493,14 @@ async function keepAwake(){
    그대로 두면 배터리·데이터만 태우고, 돌아와도 어차피 한참 밀린 화면을 다시 당겨야 한다.
    24시간 켜 두는 쓰임이라 이 차이가 크다. */
 function pauseStreams(){
-  dormant=true;
+  dormant=true; DBG.add('절전','화면이 안 보여 정지',{화면:S.open.length});
   S.open.forEach(o=>{
     try{ o.hls && o.hls.stopLoad(); }catch(_){}
     const v=o.cell?.querySelector('video'); if(v) v.pause();
   });
 }
 function resumeStreams(){
-  dormant=false;
+  dormant=false; DBG.add('절전해제','다시 재생',{화면:S.open.length});
   S.open.forEach(o=>{
     try{ o.hls && o.hls.startLoad(); }catch(_){}
     const v=o.cell?.querySelector('video'); if(v) v.play().catch(()=>{});
@@ -1442,8 +1515,31 @@ document.addEventListener('visibilitychange',()=>{
   else sleepTimer=setTimeout(pauseStreams, 15000);
 });
 
+/* 1분마다 상태를 한 줄로 남긴다 — 오래 켜 둘수록 흐름(메모리·끊김·지연)이 보인다.
+   cctvDiag.snaps() 로 표를, cctvDiag.csv() 로 붙여넣기용 텍스트를 얻는다. */
+setInterval(()=>{
+  if(!S.open.length) return;
+  const m=performance.memory;
+  const rows=S.open.map(diagRow);
+  const lags=rows.map(r=>r.지연).filter(x=>x!=null);
+  DBG.snaps.push({
+    분:+(((Date.now()-DBG.t0)/60000).toFixed(1)),
+    화면:S.open.length, 절전:dormant?1:0,
+    지연평균:lags.length?+(lags.reduce((a,b)=>a+b,0)/lags.length).toFixed(2):null,
+    지연최대:lags.length?+Math.max(...lags).toFixed(2):null,
+    끊김:rows.reduce((a,r)=>a+r.끊김,0),
+    재연결:rows.reduce((a,r)=>a+r.재연결,0),
+    버린프레임:rows.reduce((a,r)=>a+(r.버린프레임||0),0),
+    느린소스:rows.filter(r=>r.느림).length,
+    메모리MB:m?+(m.usedJSHeapSize/1048576).toFixed(1):null,
+    버퍼목표:bufFor()
+  });
+  if(DBG.snaps.length>1500) DBG.snaps.shift();   // 25시간치
+},60000);
+
 function start(){
   keepAwake();
+  DBG.add('시작', SUB?'보조 창':'메인 창', {화면:S.open.length});
   const saved=S.save?LS.get('open',null):null;
   // 저장된 화면이 있으면 그대로, 없으면 즐겨찾기 전체를 띄운다
   const list=(saved&&saved.length)
