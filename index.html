@@ -255,7 +255,10 @@ body.classic .sheet-in{border:2px solid #888}
      16:9 로 고정하고 아래로 스크롤하게 두는 편이 훨씬 잘 보인다. */
   #stage{overflow-y:auto;-webkit-overflow-scrolling:touch}
   #grid{height:auto;min-height:100%}
-  .gridrow{flex:0 0 auto;justify-content:flex-start}
+  /* align-items 기본값 stretch 는 칸을 줄 높이에 맞춰 늘린다.
+     그러면 높이가 auto 가 아니게 되어 aspect-ratio 가 무시된다 —
+     크게 보기를 닫을 때 늘어난 줄 높이가 그대로 남아 칸 하나가 화면을 다 먹었다. */
+  .gridrow{flex:0 0 auto;justify-content:flex-start;align-items:flex-start}
   /* 영상은 16:9 라 4:3 칸에 담으면 아래가 남는다.
      영상을 위로 붙여 그 남는 검은 자리에 조작줄을 넣는다 — 영상을 가리지 않는다. */
   /* 폭은 열 수로 고정한다 — 줄 끝에 한 칸만 남아도 크기가 같다 */
@@ -857,6 +860,9 @@ $('#grid').onclick=e=>{
   if(c){ S.active=+c.dataset.i; $$('.cell').forEach(el=>el.classList.toggle('sel',el===c)); }
 };
 $('#grid').addEventListener('dblclick',e=>{
+  /* 버튼을 두 번 누르면 click 두 번에 이어 dblclick 까지 와서
+     크게 보기가 열렸다 닫혔다 다시 열린다 — 버튼 위에서는 무시한다 */
+  if(e.target.closest('[data-zoom],[data-close],[data-reload]')) return;
   const c=e.target.closest('.cell');
   if(c) setZoom(+c.dataset.i);
 });
@@ -1115,7 +1121,24 @@ function loadScript(a){return new Promise(r=>{let i=0;(function n(){
   if(i>=a.length)return r(false);const s=document.createElement('script');
   s.src=a[i++];s.onload=()=>r(true);s.onerror=n;document.head.appendChild(s);})();});}
 
+/* 무음 영상은 화면 꺼짐을 막지 못한다 — 폰이 제 시간(보통 15~30분)에 잠긴다.
+   감시 화면으로 띄워두는 용도이므로 켜져 있는 동안은 잠금을 막는다.
+   탭을 벗어나면 잠금이 자동 해제되므로 돌아올 때 다시 잡는다. */
+let wake=null;
+async function keepAwake(){
+  if(!('wakeLock' in navigator) || document.visibilityState!=='visible') return;
+  try{
+    if(wake && !wake.released) return;
+    wake=await navigator.wakeLock.request('screen');
+    wake.addEventListener('release',()=>{ wake=null; });
+  }catch(e){}                          // 배터리 절약 모드 등에서는 거부된다 — 무시
+}
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible') keepAwake();
+});
+
 function start(){
+  keepAwake();
   const saved=S.save?LS.get('open',null):null;
   // 저장된 화면이 있으면 그대로, 없으면 즐겨찾기 전체를 띄운다
   const list=(saved&&saved.length)
