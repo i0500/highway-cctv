@@ -961,11 +961,13 @@ function healTick(){
        조각이 늘어나는 속도를 재서 느린 소스는 따로 다룬다. */
     const edge=edgeOf(o.hls);
     if(edge!=null && isFinite(edge)){
-      if(o._pe!=null && edge>=o._pe){
-        const per=(edge-o._pe)/2;      // 2초 주기 → 초당 몇 초치가 생산되는가
-        o._rate = o._rate==null ? per : o._rate*0.75 + per*0.25;
+      /* 조각은 2초에 하나씩 뚝뚝 늘어나므로 주기마다 재면 0과 2 사이를 널뛴다.
+         30초 창으로 재야 '초당 몇 초치가 생산되는가'가 제대로 나온다. */
+      if(o._e0==null || edge<o._e0){ o._e0=edge; o._t0=now; }
+      else if(now-o._t0>=12000){
+        o._rate=(edge-o._e0)/((now-o._t0)/1000);
+        if(now-o._t0>=30000){ o._e0=edge; o._t0=now; }   // 창을 밀어 최근 상태를 본다
       }
-      o._pe=edge;
     }
     o.slow = o._rate!=null && o._rate<0.75;   // 실시간의 75% 미만이면 느린 소스
     o.cell?.classList.toggle('slow', o.slow);
@@ -1186,8 +1188,11 @@ setInterval(()=>{
     let lag=null;
     try{ const e=edgeOf(x.hls);
       if(e!=null && isFinite(e) && xv && xv.currentTime>0) lag=e-xv.currentTime; }catch(_){}
+    /* 받는 시간(ms)은 회선 상태, 배속(x)은 카메라가 실시간만큼 보내주는지를 뜻한다.
+       카메라가 느리면 회선이 멀쩡해도 끊기므로 둘을 같이 보여야 구분이 된다. */
     b.textContent = (x.lastMs!=null ? x.lastMs+'ms' : '—')
-                  + (lag!=null && isFinite(lag) ? ' · '+lag.toFixed(1)+'초' : '');
+                  + (lag!=null && isFinite(lag) ? ' · '+lag.toFixed(1)+'초' : '')
+                  + (x._rate!=null ? ' · '+x._rate.toFixed(2)+'x' : '');
   });
   updateDiag();
 },500);
