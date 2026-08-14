@@ -255,10 +255,13 @@ body.classic .sheet-in{border:2px solid #888}
      16:9 로 고정하고 아래로 스크롤하게 두는 편이 훨씬 잘 보인다. */
   #stage{overflow-y:auto;-webkit-overflow-scrolling:touch}
   #grid{height:auto;min-height:100%}
-  .gridrow{flex:0 0 auto}
+  .gridrow{flex:0 0 auto;justify-content:flex-start}
   /* 영상은 16:9 라 4:3 칸에 담으면 아래가 남는다.
      영상을 위로 붙여 그 남는 검은 자리에 조작줄을 넣는다 — 영상을 가리지 않는다. */
-  .cell{aspect-ratio:4/3}
+  /* 폭은 열 수로 고정한다 — 마지막 줄에 한 칸만 남아도 크기가 같다 */
+  .cell{aspect-ratio:4/3;
+    flex:0 0 calc((100% - (var(--cols,2) - 1) * var(--gp,2px)) / var(--cols,2))}
+  body.reimagined #grid{--gp:0px}
   .cell video{object-position:top}
   #grid.zoomed{height:100%}
   #grid.zoomed .cell.zoom{aspect-ratio:auto;height:100%}
@@ -274,8 +277,11 @@ body.classic .sheet-in{border:2px solid #888}
   #grid .cell .zm{left:5px}
   #grid .cell .rf{left:35px}
   #grid .cell .x{left:65px}
-  #grid .cell .ttl{top:auto;bottom:4px;left:96px;right:5px;height:26px;
-    display:flex;align-items:center;padding:0;background:none;border:none;
+  /* 이름 뒤에만 옅게 깔아 어떤 배경에서도 읽히게 한다 — 글자 길이만큼만 */
+  #grid .cell .ttl{top:auto;bottom:4px;left:96px;right:auto;height:26px;
+    max-width:calc(100% - 101px);
+    display:flex;align-items:center;padding:0 7px;border:none;
+    background:rgba(0,0,0,.42);border-radius:7px;
     font-size:11.5px;font-weight:700;color:#e7edf4;text-shadow:none;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   /* 확대 중에는 여유가 있으니 크게 */
@@ -285,7 +291,8 @@ body.classic .sheet-in{border:2px solid #888}
   #grid.zoomed .cell.zoom .zm{left:8px}
   #grid.zoomed .cell.zoom .rf{left:52px}
   #grid.zoomed .cell.zoom .x{left:96px}
-  #grid.zoomed .cell.zoom .ttl{left:142px;bottom:8px;height:38px;font-size:14px}
+  #grid.zoomed .cell.zoom .ttl{left:142px;bottom:8px;height:38px;font-size:14px;
+    max-width:calc(100% - 150px);padding:0 11px;border-radius:9px}
 }
 </style>
 </head>
@@ -675,7 +682,11 @@ function render(){
   g.textContent='';                       // 남은 빈 행 컨테이너 제거
   let idx=0;
   if(S.zoom>=S.open.length) S.zoom=-1;          // 닫혀서 사라진 화면이면 해제
-  rowsFor(S.open.length).forEach(cnt=>{
+  const rows=rowsFor(S.open.length);
+  /* 마지막 줄이 한 칸만 남으면 그 칸이 가로를 혼자 차지해 혼자만 두 배로 커진다.
+     칸 폭을 줄 수가 아니라 열 수로 고정해 어느 줄이든 크기가 같게 한다. */
+  g.style.setProperty('--cols', Math.max(1,...rows));
+  rows.forEach(cnt=>{
     const r=document.createElement('div'); r.className='gridrow';
     for(let i=0;i<cnt && idx<S.open.length;i++,idx++){
       const o=S.open[idx];
