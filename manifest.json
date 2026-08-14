@@ -1,0 +1,16 @@
+{
+  "name": "고속도로 CCTV",
+  "short_name": "CCTV",
+  "description": "고속도로·국도 CCTV 저지연 뷰어",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1A1020",
+  "theme_color": "#1A1020",
+  "lang": "ko",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-maskable.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#2b2b2b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CCTV">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<title>고속도로 CCTV</title>
+<style>
+/* ══════════════ 공통 토큰 ══════════════ */
+:root{
+  --sb:env(safe-area-inset-bottom,0px); --st:env(safe-area-inset-top,0px);
+  --mono:ui-monospace,Consolas,"D2Coding",monospace;
+}
+/* 클래식 — 기존 프로그램 값 그대로 (LIGHT_GRAY #D3D3D3, GRAY #808080) */
+body.classic{
+  --bg:#ECECEC; --panel:#D3D3D3; --panel2:#C4C4C4; --line:#000; --line2:#C8C8C8;
+  --fg:#000; --dim:#444; --acc:#0A55A8; --stage:#808080; --title:#D3D3D3;
+  --radius:0px; --font:"돋움",Dotum,"맑은 고딕","Malgun Gothic",sans-serif;
+}
+/* 개선 — 구조는 기존 그대로, 외형만 정리 */
+body.modern{
+  --bg:#0e1116; --panel:#161b22; --panel2:#1c232d; --line:#2a323d; --line2:#2a323d;
+  --fg:#e6edf3; --dim:#8b949e; --acc:#4493f8; --stage:#000; --title:#1c232d;
+  --radius:10px; --font:"Pretendard","Malgun Gothic","Apple SD Gothic Neo",-apple-system,sans-serif;
+}
+/* 재해석 — 영상이 주인공. 조작부는 영상 위에 얹고, 목록은 하단 스트립으로 */
+body.reimagined{
+  --bg:#07080a; --panel:rgba(22,24,30,.72); --panel2:rgba(255,255,255,.09);
+  --line:rgba(255,255,255,.14); --line2:rgba(255,255,255,.10);
+  --fg:#f2f4f7; --dim:#9aa3af; --acc:#ff6b35; --stage:#000; --title:transparent;
+  --radius:14px; --font:"Pretendard","Apple SD Gothic Neo","Malgun Gothic",-apple-system,sans-serif;
+}
+body.reimagined #main{position:relative}
+body.reimagined #side{position:absolute;left:0;top:0;bottom:0;z-index:60;
+  background:rgba(10,11,14,.94);backdrop-filter:blur(14px);border-right:1px solid var(--line2)}
+body.reimagined #side.closed{display:none}
+body.reimagined .vtab{display:none}
+body.reimagined #top{position:absolute;left:0;right:0;top:var(--st);z-index:40;
+  background:linear-gradient(rgba(0,0,0,.72),transparent);border:none;padding:10px 12px 22px}
+body.reimagined .tbtn{background:var(--panel2);border:1px solid var(--line2);
+  backdrop-filter:blur(10px);border-radius:20px}
+body.reimagined #app{padding-top:0}
+body.reimagined .live{background:rgba(0,0,0,.55);backdrop-filter:blur(10px);
+  border:1px solid var(--line2)}
+body.reimagined .live.g{color:#4ade80} body.reimagined .live.y{color:#fbbf24}
+body.reimagined .live.r{color:#f87171}
+body.reimagined #grid{gap:0;background:#000}
+body.reimagined .gridrow{gap:0}
+body.reimagined .cell{border:0}
+body.reimagined .cell .ttl{top:auto;bottom:0;padding:20px 10px 8px;font-size:12.5px;
+  background:linear-gradient(transparent,rgba(0,0,0,.85));color:#fff;border:none;
+  text-shadow:0 1px 4px #000}
+body.reimagined .cell .x{top:auto;bottom:6px;right:6px;width:26px;height:26px;
+  background:rgba(0,0,0,.5);border-radius:50%;color:#fff}
+body.reimagined .cell.sel{outline:2px solid var(--acc);outline-offset:-2px}
+/* 하단 카메라 스트립 */
+#strip{display:none;flex:0 0 auto;gap:8px;padding:9px 10px calc(9px + var(--sb));
+  overflow-x:auto;background:rgba(8,9,11,.96);border-top:1px solid var(--line2);
+  scrollbar-width:none}
+#strip::-webkit-scrollbar{display:none}
+body.reimagined #strip{display:flex}
+.scard{flex:0 0 auto;min-width:96px;max-width:150px;padding:9px 12px;border-radius:12px;
+  background:var(--panel2);border:1px solid var(--line2);font-size:12.5px;cursor:pointer;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:44px;
+  display:flex;align-items:center;gap:6px}
+.scard.on{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
+.scard .dot{width:6px;height:6px;border-radius:50%;background:var(--dim);flex:0 0 auto}
+.scard.on .dot{background:#fff}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overscroll-behavior:none}
+body{margin:0;background:var(--bg);color:var(--fg);overflow:hidden;font:15px/1.5 var(--font)}
+button,select,input{font-family:inherit;font-size:15px;color:inherit}
+button{background:none;border:none;cursor:pointer}
+
+/* ══════════════ 게이트 ══════════════ */
+#gate{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;
+      padding:20px;background:#1f2937}
+#gate.hide{display:none}
+.gcard{width:100%;max-width:360px;background:#fff;color:#111;border-radius:12px;padding:26px 22px;
+       box-shadow:0 18px 50px rgba(0,0,0,.35)}
+.gcard h1{font-size:18px;margin:0 0 3px;text-align:center}
+.gcard .s{font-size:12.5px;color:#666;text-align:center;margin-bottom:18px}
+.gcard label{display:block;font-size:12px;color:#444;margin:12px 0 4px;font-weight:600}
+.gcard input,.gcard select{width:100%;padding:11px;border:1px solid #bbb;border-radius:7px;
+  background:#fff;color:#111;min-height:44px}
+.gbtn{width:100%;padding:12px;border-radius:7px;background:#1f2937;color:#fff;font-weight:700;
+      margin-top:16px;min-height:46px}
+.gmsg{margin-top:11px;font-size:13px;padding:9px 11px;border-radius:6px;display:none}
+.gmsg.on{display:block;background:#fdecea;color:#8b241a;border:1px solid #f3b8b1}
+
+/* ══════════════ 앱 ══════════════ */
+#app{display:flex;flex-direction:column;height:100%;padding-top:var(--st);padding-bottom:var(--sb)}
+#app.hide{display:none}
+
+/* 상단바 */
+#top{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--panel);
+     border-bottom:1px solid var(--line2);flex:0 0 auto;flex-wrap:wrap}
+body.classic #top{border-bottom:1px solid #999}
+#top h1{font-size:14px;margin:0;font-weight:700;white-space:nowrap}
+.tbtn{padding:8px 13px;background:var(--panel2);border:1px solid var(--line2);
+      border-radius:var(--radius);min-height:38px;white-space:nowrap;font-size:13.5px}
+body.classic .tbtn{border:1px solid #888;background:#D3D3D3}
+.tbtn.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+.sp{flex:1}
+.live{font-family:var(--mono);font-size:12.5px;font-weight:800;padding:3px 10px;
+      border-radius:12px;background:rgba(0,0,0,.12);white-space:nowrap}
+body.modern .live{background:#0a0d12}
+.live.g{color:#1a7f37} .live.y{color:#9a6700} .live.r{color:#c0392b}
+body.modern .live.g{color:#3fb950} body.modern .live.y{color:#d29922} body.modern .live.r{color:#f85149}
+
+/* 본문 */
+#main{flex:1 1 auto;min-height:0;display:flex}
+#side{flex:0 0 auto;display:flex;background:var(--panel);border-right:1px solid var(--line2)}
+body.classic #side{border-right:1px solid #999}
+.col{display:flex;flex-direction:column;width:190px;min-width:0}
+.col.hide{display:none}
+.colhead{display:flex;flex-direction:column;gap:4px;padding:6px}
+.colhead button{padding:10px;background:var(--panel2);border:1px solid var(--line2);
+  border-radius:var(--radius);min-height:40px;font-size:13.5px}
+body.classic .colhead button{border:1px solid #888;background:#D3D3D3}
+.list{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.item{padding:9px 11px;border-bottom:1px solid var(--line2);cursor:pointer;font-size:14px;
+      display:flex;align-items:center;gap:8px;min-height:42px}
+body.classic .item{border:1px solid #C8C8C8;border-width:0 0 1px 0}
+.item:hover{background:var(--panel2)}
+.item.on{background:var(--acc);color:#fff}
+.item .idx{font-family:var(--mono);font-size:11px;opacity:.6;flex:0 0 auto;width:22px}
+.item .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 세로 접기 탭 — 원본의 ┃고┃속┃도┃로┃ 재현 */
+.vtab{width:26px;background:var(--panel);border-left:1px solid var(--line);
+      border-right:1px solid var(--line);display:flex;flex-direction:column;
+      align-items:center;justify-content:center;cursor:pointer;gap:1px;font-size:12px;
+      user-select:none;flex:0 0 auto}
+body.modern .vtab{border-color:var(--line2)}
+.vtab:hover{background:var(--panel2)}
+.vtab span{line-height:1.15}
+
+/* 무대 */
+#stage{flex:1 1 auto;min-width:0;background:var(--stage);position:relative;overflow:hidden}
+#grid{display:flex;flex-direction:column;width:100%;height:100%;gap:2px;background:var(--line2)}
+.gridrow{display:flex;flex:1 1 0;gap:2px;min-height:0}
+.cell{flex:1 1 0;position:relative;background:#000;min-width:0;overflow:hidden}
+.cell video{width:100%;height:100%;object-fit:contain;background:#000;display:block}
+.cell.fit video{object-fit:fill}
+.cell .ttl{position:absolute;left:0;right:0;top:0;padding:3px 7px;font-size:11.5px;font-weight:700;
+  background:var(--title);color:var(--fg);border-bottom:1px solid var(--line2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.modern .cell .ttl{background:linear-gradient(rgba(0,0,0,.75),transparent);border:none;
+  color:#fff;text-shadow:0 1px 3px #000}
+.cell .x{position:absolute;top:2px;right:3px;width:22px;height:20px;display:grid;place-items:center;
+  font-size:13px;color:var(--dim);background:transparent}
+.cell .x:hover{color:#c0392b}
+.cell.sel{outline:2px solid var(--acc);outline-offset:-2px}
+.cell .ov{position:absolute;inset:0;display:grid;place-items:center;background:rgba(0,0,0,.55);
+  color:#ccc;font-size:12px;text-align:center;padding:8px}
+.cell .ov.hide{display:none}
+#empty{position:absolute;inset:0;display:grid;place-items:center;color:#eee;font-size:14px;
+  text-align:center;padding:20px;pointer-events:none}
+#empty.hide{display:none}
+
+/* 시트 */
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;z-index:900;
+       align-items:center;justify-content:center;padding:16px}
+.sheet.on{display:flex}
+.sheet-in{background:var(--bg);border:1px solid var(--line2);border-radius:var(--radius);
+  padding:18px;max-width:460px;width:100%;max-height:88vh;overflow-y:auto}
+body.classic .sheet-in{border:2px solid #888}
+.sheet h2{font-size:16px;margin:0 0 12px}
+.chk{display:flex;align-items:center;gap:9px;padding:9px 0;font-size:15px;cursor:pointer}
+.chk input{width:18px;height:18px}
+.note{font-size:12.5px;color:var(--dim);line-height:1.6;margin-top:8px}
+.btn{display:block;width:100%;padding:12px;border-radius:var(--radius);background:var(--panel2);
+  border:1px solid var(--line2);text-align:center;margin-top:9px;min-height:46px}
+.btn.pri{background:var(--acc);color:#fff;font-weight:700;border-color:var(--acc)}
+.seg{display:flex;gap:6px;margin-top:6px}
+.seg button{flex:1;padding:10px 4px;border:1px solid var(--line2);border-radius:var(--radius);
+  background:var(--panel2);font-size:13px;min-height:42px}
+.seg button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+
+/* 모바일 */
+@media(max-width:760px){
+  #main{flex-direction:column}
+  #side{position:absolute;left:0;top:0;bottom:0;z-index:50;border-right:1px solid var(--line2);
+        box-shadow:4px 0 16px rgba(0,0,0,.3)}
+  #side.closed{display:none}
+  #stage{flex:1 1 auto}
+  .col{width:min(72vw,240px)}
+}
+</style>
+</head>
+<body class="modern">
+
+<!-- 게이트 -->
+<div id="gate" class="hide">
+  <div class="gcard">
+    <h1>고속도로 CCTV</h1>
+    <div class="s">승인된 사용자만 이용할 수 있습니다</div>
+    <form id="gform">
+      <label>아이디</label>
+      <select id="gid"><option value="">—</option></select>
+      <label>비밀번호</label>
+      <input type="password" id="gpw" autocomplete="current-password">
+      <button type="submit" class="gbtn" id="gbtn">로그인</button>
+    </form>
+    <div class="gmsg" id="gmsg"></div>
+  </div>
+</div>
+
+<!-- 앱 -->
+<div id="app">
+  <div id="top">
+    <button class="tbtn" id="bSide">☰</button>
+    <h1>경부선 북천안~청주</h1>
+    <span class="live" id="live">—</span>
+    <span class="sp"></span>
+    <button class="tbtn" id="bSkin">개선 UI</button>
+    <button class="tbtn" id="bSet">설정</button>
+  </div>
+
+  <div id="main">
+    <div id="side">
+      <div class="col" id="colFav">
+        <div class="colhead">
+          <button id="bSetting2">설정</button>
+          <button id="bFavAll">즐겨찾기 전체 열기</button>
+        </div>
+        <div class="list" id="favList"></div>
+      </div>
+      <div class="vtab" id="tabFav" title="즐겨찾기 목록 접기/펼치기"></div>
+      <div class="col" id="colCam">
+        <div class="list" id="camList"></div>
+      </div>
+      <div class="vtab" id="tabCam" title="CCTV 목록 접기/펼치기"></div>
+    </div>
+
+    <div id="stage">
+      <div id="grid"></div>
+      <div id="empty">목록에서 CCTV 를 선택하세요</div>
+    </div>
+  </div>
+
+  <div id="strip"></div>
+</div>
+
+<!-- 설정 -->
+<div class="sheet" id="sheet">
+  <div class="sheet-in">
+    <h2>설정</h2>
+
+    <label class="chk"><input type="checkbox" id="oFit"> <span>고정 종횡비</span></label>
+    <label class="chk"><input type="checkbox" id="oSave" checked> <span>CCTV 저장</span></label>
+    <label class="chk"><input type="checkbox" id="oLow"> <span>저사양 네트워크용</span></label>
+
+    <div style="margin-top:14px">
+      <div style="font-size:13px;font-weight:700">지연 우선순위</div>
+      <div class="seg" id="segLive">
+        <button data-m="live" class="on">라이브 최우선<small style="display:block;font-size:10.5px;opacity:.75">끊기면 자동 보정</small></button>
+        <button data-m="bal">균형<small style="display:block;font-size:10.5px;opacity:.75">안정 위주</small></button>
+        <button data-m="safe">안정 최우선<small style="display:block;font-size:10.5px;opacity:.75">거의 안 끊김</small></button>
+      </div>
+      <div class="note" id="liveNote"></div>
+    </div>
+
+    <div style="margin-top:14px">
+      <div style="font-size:13px;font-weight:700">화면 UI</div>
+      <div class="seg" id="segSkin">
+        <button data-s="classic">기존 그대로<small style="display:block;font-size:10.5px;opacity:.75">2021년 화면</small></button>
+        <button data-s="modern" class="on">개선<small style="display:block;font-size:10.5px;opacity:.75">배치 유지</small></button>
+        <button data-s="reimagined">재해석<small style="display:block;font-size:10.5px;opacity:.75">영상 위주</small></button>
+      </div>
+    </div>
+
+    <button class="btn pri" id="bClose">닫기</button>
+    <div class="note" id="diag"></div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+   고속도로 CCTV 뷰어
+   · 스트림: 로드플러스 CDN (HLS 1초 조각) — API 호출 없이 직접 접근
+   · 기존 프로그램(CCTVR, 2021) 의 레이아웃 규칙·기능을 그대로 재현
+   · 최우선 목표: 라이브에 최대한 가깝게
+   ═══════════════════════════════════════════════════════════ */
+
+const CAMS = [{"n":"감절교","u":"https://live13.exmobile.hscdn.com/livehttp/vlF5wBUDU1ZhgHg6v1X58Q5dPf4ovVDjPCu_vJK51rM/playlist.m3u8"},{"n":"속창육교","u":"https://live13.exmobile.hscdn.com/livehttp/Jj5Edot0wRSPqd12NzR2EzH8cxBCDDDoCL3HXf2B4j0/playlist.m3u8"},{"n":"병천2교","u":"https://live13.exmobile.hscdn.com/livehttp/3-pAxMMVLCWpj8-n10vbwo5A_T9ReeAyqM43KsoPTSc/playlist.m3u8"},{"n":"강정","u":"https://live13.exmobile.hscdn.com/livehttp/vhP1xjXTlny_vXilMWrbqncdEYyOJah9MB2G8lK1tOQ/playlist.m3u8"},{"n":"사정","u":"https://live13.exmobile.hscdn.com/livehttp/ysRvOriuKftk8GZDI30NYUqq0E9bbZbj1gPB8j6L5Kw/playlist.m3u8"},{"n":"청주휴게소","u":"https://live13.exmobile.hscdn.com/livehttp/wc3-YAKTtKOG3UE1y7wIUSaYM1barq1OK5i3R0o_KV8/playlist.m3u8"},{"n":"북천안","u":"https://live13.exmobile.hscdn.com/livehttp/Jd6I_XKuPt0zPMi-43D9F_NtBoTZvNE5QqmPGyLYwJs/playlist.m3u8"},{"n":"문덕육교","u":"https://live13.exmobile.hscdn.com/livehttp/YwYzKl69FtRixm2nLNI7snEFpBYzT9G-q60qL6mIA9I/playlist.m3u8"},{"n":"망향휴게소","u":"https://live13.exmobile.hscdn.com/livehttp/4bHCBtyKtWcBM4LHLWFAtrT4wCkBpTIe93I6A5nY8YU/playlist.m3u8"},{"n":"안서철육교(고정)","u":"https://live13.exmobile.hscdn.com/livehttp/EDplFz6Iu_h5D__kLD48XUkjvjK2FdCchWUYZx9GCKU/playlist.m3u8"},{"n":"안서철육교","u":"https://live13.exmobile.hscdn.com/livehttp/rYWAFzlHosYq137Ko1ygiz5RAEW3WMqP6SG5Or3QJo0/playlist.m3u8"},{"n":"하암육교","u":"https://live13.exmobile.hscdn.com/livehttp/tKmxkfMX-pNATm9hW7TleEBCmxx1hjXeqRb7z6T88D8/playlist.m3u8"},{"n":"천안","u":"https://live13.exmobile.hscdn.com/livehttp/onST0s1sWADb7-eAlMTSs0J7PU34KNXKQ_IWvyIgUnc/playlist.m3u8"},{"n":"신부","u":"https://live13.exmobile.hscdn.com/livehttp/Vqf6g-rCclwyt6GpVTSlBV3UJLkVi8bi-zIbFLxnvGE/playlist.m3u8"},{"n":"구성육교","u":"https://live13.exmobile.hscdn.com/livehttp/bL1dcNTSZZJVDeEUpHBVp5jzEqT2__WQGGo_HwyxbQs/playlist.m3u8"},{"n":"구성2교","u":"https://live13.exmobile.hscdn.com/livehttp/5sDYAwmasVaSIXLtKpX5ECLAUHcTeYL8tlj0B2IbNcc/playlist.m3u8"},{"n":"천삼휴게소","u":"https://live13.exmobile.hscdn.com/livehttp/6E-JBvWwoeLfdONJtuVlLBNOtRbVAPfhP72_nT7L15w/playlist.m3u8"},{"n":"천안분기점","u":"https://live13.exmobile.hscdn.com/livehttp/GO7UjjY47GShlHRjEjWcD-iV5hPMd2V_2gTF_Sm60q0/playlist.m3u8"},{"n":"응원","u":"https://live13.exmobile.hscdn.com/livehttp/v6AgIrJ11K5IzhXSqkAQofcocgQHfGs8ADyP4JMGp2A/playlist.m3u8"},{"n":"응원고개","u":"https://live13.exmobile.hscdn.com/livehttp/MiH3fwpnEomHm5D4mXTb7W5wsr4o2noZEOGnR27-0-c/playlist.m3u8"},{"n":"신계","u":"https://live13.exmobile.hscdn.com/livehttp/Zvbvr11woRYNaejuNTQVZR6aaDdWI24Kvw0mMHXhkxM/playlist.m3u8"},{"n":"목천(고정)","u":"https://live13.exmobile.hscdn.com/livehttp/1NPT5vpzVNtOY-jgtJ_Ihz7uG2YGowfNFLqe35TI_qc/playlist.m3u8"},{"n":"목천","u":"https://live13.exmobile.hscdn.com/livehttp/Ivaqze2Hg3wrIMEOXUU-FMsCUsaR6tal_324yfM9mw8/playlist.m3u8"},{"n":"신사","u":"https://live13.exmobile.hscdn.com/livehttp/XvQZsqqp9xUPlpml1zBNkSZBmcQpjyCSC_ioVW7_xAM/playlist.m3u8"},{"n":"성남2","u":"https://live13.exmobile.hscdn.com/livehttp/tSGd4UySP5JQAghu9ypwszJ2RMZFjwl5AmTnnfkzf74/playlist.m3u8"},{"n":"성남1","u":"https://live13.exmobile.hscdn.com/livehttp/JpjJcAm28eRStx3W3zQm5n6qRG55uLEr8bvF7eECOsw/playlist.m3u8"},{"n":"천안휴게소","u":"https://live13.exmobile.hscdn.com/livehttp/Rqn6nK4GOVGHejA5_33QgfMihNceaCfwbtjCraBRb90/playlist.m3u8"},{"n":"금계","u":"https://live13.exmobile.hscdn.com/livehttp/YjoTvyUcI7x8V0TS9OzXvLPfSjeX42GSklwgltqxNp8/playlist.m3u8"},{"n":"수락","u":"https://live13.exmobile.hscdn.com/livehttp/5KuQ45a7TlDbqIqL45hscH3yEl1fIgHnGrJaWhmYQN4/playlist.m3u8"},{"n":"천수천교","u":"https://live13.exmobile.hscdn.com/livehttp/uuErAQlxIn1Aw2mZnDTgUH3KoTRyrA7s0pt6C2lzln8/playlist.m3u8"},{"n":"국사교","u":"https://live13.exmobile.hscdn.com/livehttp/fO7yq81pGRHjeoaTnw2aDiak_mCLwFQjj0xhdDEbry4/playlist.m3u8"},{"n":"몽단이고개","u":"https://live13.exmobile.hscdn.com/livehttp/_w9TRwXCgzvIm1MaslFQNXmfPBR5huOgowNtXqqpr8k/playlist.m3u8"},{"n":"가락","u":"https://live13.exmobile.hscdn.com/livehttp/Te_-ylVkQtCD99-SzNeU15-pFXLsKgkDuciHGJ_GP1o/playlist.m3u8"},{"n":"옥산휴게소","u":"https://live13.exmobile.hscdn.com/livehttp/W4VjefRpiOuzD-1ueEQTcA9YCAkZwTV8T-LLRJaI0ic/playlist.m3u8"},{"n":"옥산","u":"https://live13.exmobile.hscdn.com/livehttp/fGu-lyjAZesKowPrjlNhNfhn44iG44XpyspYIMY-2ys/playlist.m3u8"},{"n":"미호천교","u":"https://live13.exmobile.hscdn.com/livehttp/NTYK0TgvFNcx9qBXUEjuOX0yVvI_JmqvsIyzzO6pj44/playlist.m3u8"},{"n":"청주","u":"https://live13.exmobile.hscdn.com/livehttp/Z2TNXITQl7JwN4t2DrJIxpNhg2ianPLQUhYrTNWXAVY/playlist.m3u8"},{"n":"남이분기점","u":"https://live13.exmobile.hscdn.com/livehttp/hmIypKuYp1R2Z2jKNyVYDXC8Vp2LtancohlKMTNw8Mw/playlist.m3u8"},{"n":"백현","u":"https://live2.exmobile.hscdn.com/livehttp/m8x0Ly735FXqhgB98qgRos0vrmdxWeVyXqvKF-Pt6f4/playlist.m3u8"}];
+
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const LS={get:(k,d)=>{try{return JSON.parse(localStorage.getItem('cv_'+k))??d}catch(_){return d}},
+          set:(k,v)=>{try{localStorage.setItem('cv_'+k,JSON.stringify(v))}catch(_){}},
+          del:k=>{try{localStorage.removeItem('cv_'+k)}catch(_){}}};
+
+const S={
+  open:[],                                  // 재생 중인 카메라 [{cam,hls,cell}]
+  active:0, skin:LS.get('skin','modern'), mode:LS.get('mode','live'),
+  favs:LS.get('favs',CAMS.map(c=>c.n)),     // 기본은 전체를 즐겨찾기로
+  fit:LS.get('fit',false), low:LS.get('low',false), save:LS.get('save',true),
+  sideOpen:true, colFav:true, colCam:true
+};
+const MAX=20;
+
+/* ─────────── 라이브 근접 최우선: 적응형 버퍼 ───────────
+   지연을 줄이는 유일한 방법은 버퍼를 얇게 두는 것인데, 너무 얇으면 끊긴다.
+   그래서 고정값을 쓰지 않고 '끊기지 않는 최소 버퍼'를 실시간으로 찾아간다.
+   무사고 구간이 이어지면 조금씩 줄이고, 한 번이라도 끊기면 즉시 늘린다. */
+const MODES={
+  live:{start:1.8, min:1.2, max:6.0, down:0.35, up:1.0, rate:1.45},
+  bal :{start:3.0, min:2.0, max:9.0, down:0.25, up:1.2, rate:1.25},
+  safe:{start:6.0, min:4.0, max:14 , down:0.15, up:1.5, rate:1.1}
+};
+const Tune={cur:MODES.live.start, stalls:0, sinceStall:0, lastAdj:0};
+
+function modeCfg(){ return MODES[S.mode]||MODES.live; }
+function hlsConfig(){
+  const m=modeCfg();
+  return {
+    lowLatencyMode:true, enableWorker:true,
+    liveSyncDuration:Tune.cur,
+    liveMaxLatencyDuration:Math.max(Tune.cur*3, m.max*2),
+    maxLiveSyncPlaybackRate:m.rate,
+    backBufferLength:Math.max(10,Tune.cur*4),
+    maxBufferLength:Math.max(10,Tune.cur*4),
+    manifestLoadingTimeOut:8000, levelLoadingTimeOut:8000, fragLoadingTimeOut:12000,
+    ...(S.low?{capLevelToPlayerSize:true, maxBufferSize:8*1000*1000}:{})
+  };
+}
+/* 버퍼를 바꿔도 재생을 끊지 않는다 — hls.js 설정을 런타임에 갱신 */
+function applyTune(){
+  S.open.forEach(o=>{ if(o.hls){
+    o.hls.config.liveSyncDuration=Tune.cur;
+    o.hls.config.liveMaxLatencyDuration=Math.max(Tune.cur*3, modeCfg().max*2);
+  }});
+  LS.set('tune',Tune.cur);
+}
+function onStall(){
+  const m=modeCfg();
+  Tune.stalls++; Tune.sinceStall=0;
+  if(Tune.cur < m.max){
+    Tune.cur=Math.min(m.max, +(Tune.cur+m.up).toFixed(2));
+    applyTune();
+  }
+}
+setInterval(()=>{                       // 5초마다 평가
+  if(!S.open.length) return;
+  const m=modeCfg();
+  Tune.sinceStall+=5;
+  // 20초 무사고면 조금 줄여 라이브에 더 붙는다
+  if(Tune.sinceStall>=20 && Tune.cur>m.min){
+    Tune.cur=Math.max(m.min, +(Tune.cur-m.down).toFixed(2));
+    Tune.sinceStall=0; applyTune();
+  }
+},5000);
+
+/* ─────────── 레이아웃 (기존 프로그램 규칙 그대로) ───────────
+   디컴파일로 확인: 8=4x2, 9=3x3, 10=3/3/4, 12=4x3, 16=4x4, 20=5x4
+   10·11·13~15·17~19 는 줄마다 개수가 다른 불균등 배치를 쓴다. */
+const SPECIAL={10:[3,3,4],11:[3,4,4],13:[3,3,3,4],14:[3,3,4,4],15:[3,4,4,4],
+               17:[4,4,4,5],18:[4,4,5,5],19:[4,5,5,5]};
+const XY={1:[1,1],2:[2,1],3:[3,1],4:[2,2],5:[3,2],6:[3,2],7:[4,2],8:[4,2],
+          9:[3,3],12:[4,3],16:[4,4],20:[5,4]};
+function rowsFor(n){
+  if(n<=0) return [];
+  if(SPECIAL[n]) return SPECIAL[n];
+  let x=(XY[n]||[])[0];
+  if(!x) x=Math.ceil(Math.sqrt(n));
+  const rows=Math.ceil(n/x), out=[]; let left=n;
+  for(let i=0;i<rows;i++){ const c=Math.min(x,Math.ceil(left/(rows-i))); out.push(c); left-=c; }
+  return out;
+}
+
+function render(){
+  const g=$('#grid'); g.innerHTML='';
+  $('#empty').classList.toggle('hide', S.open.length>0);
+  const rows=rowsFor(S.open.length);
+  let idx=0;
+  rows.forEach(cnt=>{
+    const r=document.createElement('div'); r.className='gridrow';
+    for(let i=0;i<cnt;i++){
+      const o=S.open[idx];
+      const cell=document.createElement('div');
+      cell.className='cell'+(idx===S.active?' sel':'')+(S.fit?'':' fit');
+      cell.dataset.i=idx;
+      cell.innerHTML=`<video playsinline muted autoplay></video>
+        <div class="ttl">${idx+1}번 : ${o.cam.n}</div>
+        <button class="x" data-close="${idx}">✕</button>
+        <div class="ov">연결 중…</div>`;
+      r.appendChild(cell);
+      o.cell=cell;
+      idx++;
+    }
+    g.appendChild(r);
+  });
+  // video 요소가 새로 만들어졌으므로 다시 붙인다
+  S.open.forEach(o=>bind(o));
+  renderLists();
+}
+
+function bind(o){
+  const v=o.cell.querySelector('video');
+  const ov=o.cell.querySelector('.ov');
+  if(o.hls){ try{o.hls.destroy();}catch(_){} }
+  v.addEventListener('waiting', onStall);
+  if(!(window.Hls&&Hls.isSupported())){
+    if(v.canPlayType('application/vnd.apple.mpegurl')){
+      v.src=o.cam.u; v.addEventListener('loadeddata',()=>ov.classList.add('hide'),{once:true});
+      v.play().catch(()=>{});
+    } else ov.textContent='이 브라우저는 재생을 지원하지 않습니다';
+    return;
+  }
+  const hls=new Hls(hlsConfig()); o.hls=hls;
+  hls.on(Hls.Events.MANIFEST_PARSED,()=>v.play().catch(()=>{}));
+  hls.on(Hls.Events.FRAG_BUFFERED,()=>ov.classList.add('hide'));
+  hls.on(Hls.Events.ERROR,(_e,d)=>{
+    if(!d.fatal) return;
+    if(d.type===Hls.ErrorTypes.MEDIA_ERROR){ hls.recoverMediaError(); return; }
+    ov.classList.remove('hide'); ov.textContent='재생할 수 없습니다';
+  });
+  hls.loadSource(o.cam.u); hls.attachMedia(v);
+}
+
+function openCam(cam){
+  if(S.open.some(o=>o.cam.n===cam.n)) return;
+  if(S.open.length>=MAX) return alert('최대 '+MAX+'개까지 동시에 볼 수 있습니다');
+  S.open.push({cam,hls:null,cell:null});
+  S.active=S.open.length-1;
+  render();
+  if(S.save) LS.set('open',S.open.map(o=>o.cam.n));
+}
+function closeCam(i){
+  const o=S.open[i]; if(!o) return;
+  if(o.hls){ try{o.hls.destroy();}catch(_){} }
+  S.open.splice(i,1);
+  if(S.active>=S.open.length) S.active=Math.max(0,S.open.length-1);
+  render();
+  if(S.save) LS.set('open',S.open.map(o=>o.cam.n));
+}
+function closeAll(){ while(S.open.length) closeCam(0); }
+
+/* ─────────── 목록 ─────────── */
+const isOpen=n=>S.open.some(o=>o.cam.n===n);
+function renderLists(){
+  const favs=CAMS.filter(c=>S.favs.includes(c.n));
+  $('#favList').innerHTML=favs.map(c=>{
+    const i=CAMS.indexOf(c);
+    return `<div class="item${isOpen(c.n)?' on':''}" data-n="${i}">
+      <span class="idx">${String(i+1).padStart(2,'0')}</span>
+      <span class="nm">${c.n}</span></div>`;}).join('');
+  $('#camList').innerHTML=CAMS.map((c,i)=>
+    `<div class="item${isOpen(c.n)?' on':''}" data-n="${i}">
+      <span class="idx">${String(i+1).padStart(2,'0')}</span>
+      <span class="nm">${c.n}</span></div>`).join('');
+  renderStrip();
+}
+/* 재해석 스킨의 하단 카메라 스트립 */
+function renderStrip(){
+  if(S.skin!=='reimagined'){ $('#strip').innerHTML=''; return; }
+  $('#strip').innerHTML=CAMS.map((c,i)=>
+    `<div class="scard${isOpen(c.n)?' on':''}" data-n="${i}">
+       <span class="dot"></span>${c.n}</div>`).join('');
+}
+$('#strip').onclick=e=>{const s=e.target.closest('.scard'); if(s) pick(+s.dataset.n);};
+
+function pick(i){ const c=CAMS[i]; if(!c) return;
+  if(isOpen(c.n)){ closeCam(S.open.findIndex(o=>o.cam.n===c.n)); } else openCam(c); }
+$('#favList').onclick=e=>{const it=e.target.closest('.item'); if(it) pick(+it.dataset.n);};
+$('#camList').onclick=e=>{const it=e.target.closest('.item'); if(it) pick(+it.dataset.n);};
+$('#grid').onclick=e=>{
+  const x=e.target.closest('[data-close]');
+  if(x){ e.stopPropagation(); closeCam(+x.dataset.close); return; }
+  const c=e.target.closest('.cell');
+  if(c){ S.active=+c.dataset.i; $$('.cell').forEach(el=>el.classList.toggle('sel',el===c)); }
+};
+
+/* ─────────── 세로 탭 (원본 재현) ─────────── */
+function vtabText(el,txt){ el.innerHTML=txt.split('').map(ch=>`<span>${ch===' '?'&nbsp;':ch}</span>`).join(''); }
+vtabText($('#tabFav'),'즐겨찾기 목록');
+vtabText($('#tabCam'),'CCTV 목록');
+$('#tabFav').onclick=()=>{S.colFav=!S.colFav;$('#colFav').classList.toggle('hide',!S.colFav);};
+$('#tabCam').onclick=()=>{S.colCam=!S.colCam;$('#colCam').classList.toggle('hide',!S.colCam);};
+$('#bSide').onclick=()=>{S.sideOpen=!S.sideOpen;$('#side').classList.toggle('closed',!S.sideOpen);};
+
+/* ─────────── 스킨 ─────────── */
+const SKINS=['classic','modern','reimagined'];
+const SKIN_NAME={classic:'기존',modern:'개선',reimagined:'재해석'};
+const SKIN_BG={classic:'#D3D3D3',modern:'#0e1116',reimagined:'#07080a'};
+function applySkin(){
+  document.body.className=S.skin;
+  const next=SKINS[(SKINS.indexOf(S.skin)+1)%SKINS.length];
+  $('#bSkin').textContent=SKIN_NAME[next]+' UI';
+  $$('#segSkin button').forEach(b=>b.classList.toggle('on',b.dataset.s===S.skin));
+  document.querySelector('meta[name=theme-color]').content=SKIN_BG[S.skin];
+  // 재해석은 사이드 목록을 기본으로 닫고 하단 스트립을 쓴다
+  if(S.skin==='reimagined'){ S.sideOpen=false; $('#side').classList.add('closed'); }
+  else { $('#side').classList.remove('closed'); S.sideOpen=true; }
+  LS.set('skin',S.skin);
+  renderStrip();
+}
+$('#bSkin').onclick=()=>{
+  S.skin=SKINS[(SKINS.indexOf(S.skin)+1)%SKINS.length]; applySkin();
+};
+$$('#segSkin button').forEach(b=>b.onclick=()=>{S.skin=b.dataset.s;applySkin();});
+
+/* ─────────── 설정 ─────────── */
+const openSheet=()=>{
+  $('#oFit').checked=S.fit; $('#oSave').checked=S.save; $('#oLow').checked=S.low;
+  $$('#segLive button').forEach(b=>b.classList.toggle('on',b.dataset.m===S.mode));
+  $('#liveNote').textContent=
+    S.mode==='live' ? '가능한 한 실시간에 붙습니다. 끊기면 자동으로 버퍼를 늘렸다가, 안정되면 다시 줄여 최소 지연을 유지합니다.'
+   :S.mode==='bal'  ? '지연과 안정성의 중간입니다.'
+   :                  '끊김을 최소화합니다. 지연은 늘어납니다.';
+  $('#sheet').classList.add('on'); updateDiag();
+};
+$('#bSet').onclick=openSheet; $('#bSetting2').onclick=openSheet;
+$('#bClose').onclick=()=>$('#sheet').classList.remove('on');
+$('#sheet').onclick=e=>{if(e.target.id==='sheet')$('#sheet').classList.remove('on');};
+$('#oFit').onchange=e=>{S.fit=e.target.checked;LS.set('fit',S.fit);render();};
+$('#oSave').onchange=e=>{S.save=e.target.checked;LS.set('save',S.save);};
+$('#oLow').onchange=e=>{S.low=e.target.checked;LS.set('low',S.low);
+  S.open.forEach(o=>bind(o));};
+$$('#segLive button').forEach(b=>b.onclick=()=>{
+  S.mode=b.dataset.m; LS.set('mode',S.mode);
+  Tune.cur=modeCfg().start; Tune.sinceStall=0; applyTune();
+  $$('#segLive button').forEach(x=>x.classList.toggle('on',x===b));
+  openSheet();
+});
+$('#bFavAll').onclick=()=>{
+  closeAll();
+  CAMS.filter(c=>S.favs.includes(c.n)).slice(0,MAX).forEach(openCam);
+};
+
+/* ─────────── 라이브 표시 ─────────── */
+function updateDiag(){
+  if(!$('#sheet').classList.contains('on')) return;
+  $('#diag').innerHTML=`현재 버퍼 <b>${Tune.cur.toFixed(1)}초</b> · 재생 ${S.open.length}대`+
+    (Tune.stalls?` · 누적 보정 ${Tune.stalls}회`:'');
+}
+setInterval(()=>{
+  const o=S.open[S.active], el=$('#live');
+  let d=null;
+  try{
+    if(o?.hls){
+      const det=o.hls.levels?.[o.hls.currentLevel]?.details;
+      const v=o.cell?.querySelector('video');
+      const edge=det?.edge ?? (det?.fragments?.length
+        ? det.fragments[det.fragments.length-1].start+det.fragments[det.fragments.length-1].duration:null);
+      if(edge!=null&&v&&v.currentTime>0) d=edge-v.currentTime;
+    }
+  }catch(_){}
+  if(d==null||!isFinite(d)){ el.textContent='—'; el.className='live'; }
+  else { el.textContent='라이브 -'+d.toFixed(1)+'초';
+         el.className='live '+(d<2.5?'g':d<5?'y':'r'); }
+  updateDiag();
+},500);
+
+/* ─────────── 로그인 (accounts.json 있을 때만) ─────────── */
+const encT=new TextEncoder(), decT=new TextDecoder();
+const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+async function decryptKey(acc,pw,iter){
+  const base=await crypto.subtle.importKey('raw',encT.encode(pw),'PBKDF2',false,['deriveKey']);
+  const k=await crypto.subtle.deriveKey({name:'PBKDF2',salt:unb64(acc.salt),iterations:iter,hash:'SHA-256'},
+    base,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+  return decT.decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(acc.iv)},k,unb64(acc.ct)));
+}
+let ACCTS=null;
+async function initGate(){
+  try{
+    const r=await fetch('accounts.json?_='+Date.now(),{cache:'no-store'});
+    if(!r.ok) throw 0;
+    ACCTS=await r.json();
+  }catch(_){ return false; }            // 계정 파일이 없으면 로그인 없이 사용
+  const today=new Date().toISOString().slice(0,10);
+  const ok=(ACCTS.accounts||[]).filter(a=>a.active!==false&&(!a.expires||a.expires>=today));
+  if(!ok.length) return false;
+  $('#gid').innerHTML=ok.map(a=>`<option value="${a.id}">${a.name||a.id}</option>`).join('');
+  const sess=LS.get('sess',null);
+  if(sess&&ok.some(a=>a.id===sess)) return false;   // 이미 로그인함
+  $('#gate').classList.remove('hide'); $('#app').classList.add('hide');
+  return true;
+}
+$('#gform').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const acc=(ACCTS?.accounts||[]).find(a=>a.id===$('#gid').value);
+  if(!acc) return;
+  try{
+    await decryptKey(acc,$('#gpw').value,ACCTS.iterations||210000);
+    LS.set('sess',acc.id);
+    $('#gate').classList.add('hide'); $('#app').classList.remove('hide');
+    start();
+  }catch(_){
+    const m=$('#gmsg'); m.textContent='비밀번호가 올바르지 않습니다.'; m.className='gmsg on';
+    $('#gpw').value='';
+  }
+});
+
+/* ─────────── 시작 ─────────── */
+function loadScript(a){return new Promise(r=>{let i=0;(function n(){
+  if(i>=a.length)return r(false);const s=document.createElement('script');
+  s.src=a[i++];s.onload=()=>r(true);s.onerror=n;document.head.appendChild(s);})();});}
+
+function start(){
+  const saved=S.save?LS.get('open',null):null;
+  const list=(saved&&saved.length)
+    ? saved.map(n=>CAMS.find(c=>c.n===n)).filter(Boolean)
+    : CAMS.filter(c=>/북천안|천안분기점|목천|청주/.test(c.n)).slice(0,4);
+  (list.length?list:[CAMS[0]]).slice(0,MAX).forEach(c=>{
+    if(!S.open.some(o=>o.cam.n===c.n)) S.open.push({cam:c,hls:null,cell:null});
+  });
+  render();
+}
+
+(async()=>{
+  applySkin();
+  Tune.cur=modeCfg().start;
+  if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+  await loadScript(['https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js',
+                    'https://unpkg.com/hls.js@1/dist/hls.min.js']);
+  const needLogin=await initGate();
+  if(!needLogin){ $('#gate').classList.add('hide'); $('#app').classList.remove('hide'); start(); }
+})();
+</script>
+</body>
+</html>
