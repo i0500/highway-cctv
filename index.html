@@ -555,6 +555,10 @@ function makeCell(o){
     <button class="rf" data-reload="0" title="이 화면만 다시 연결">↻</button>
     <button class="x" data-close="0">✕</button>
     <div class="ov">연결 중…</div>`;
+  /* 끊김 감지는 셀을 만들 때 딱 한 번만 건다.
+     bind() 는 재연결마다 호출되므로 거기서 걸면 리스너가 쌓여
+     한 번 끊긴 것이 여러 번으로 집계되고 디바운스가 무력화된다. */
+  cell.querySelector('video').addEventListener('waiting', onStall);
   return cell;
 }
 function touchCell(cell,o,idx){
@@ -610,7 +614,7 @@ function bind(o){
   const v=o.cell.querySelector('video');
   const ov=o.cell.querySelector('.ov');
   if(o.hls){ try{o.hls.destroy();}catch(_){} }
-  v.addEventListener('waiting', onStall);
+  // 'waiting' 리스너는 makeCell 에서 이미 한 번 걸어두었다(여기서 걸면 누적된다)
   if(!(window.Hls&&Hls.isSupported())){
     if(v.canPlayType('application/vnd.apple.mpegurl')){
       v.src=o.cam.u; v.addEventListener('loadeddata',()=>ov.classList.add('hide'),{once:true});
@@ -654,7 +658,13 @@ function closeCam(i){
   if(o.hls){ try{o.hls.destroy();}catch(_){} }
   if(o.cell) o.cell.remove();          // 닫힌 화면만 DOM 에서 뺀다
   S.open.splice(i,1);
-  if(S.active>=S.open.length) S.active=Math.max(0,S.open.length-1);
+  /* splice 로 뒤쪽 항목이 한 칸씩 당겨진다.
+     zoom·active 는 '번호'가 아니라 '보고 있던 화면'을 따라가야 한다.
+     보정하지 않으면 C 를 닫았는데 D 가 확대되는 식으로 엉뚱한 화면이 잡힌다. */
+  if(S.zoom===i) S.zoom=-1; else if(S.zoom>i) S.zoom--;
+  if(S.active===i) S.active=Math.min(i, S.open.length-1);
+  else if(S.active>i) S.active--;
+  if(S.active<0) S.active=0;
   render();
   if(S.save) LS.set('open',S.open.map(o=>o.cam.n));
 }
@@ -813,6 +823,7 @@ document.addEventListener('keydown',e=>{
 
 /* ─────────── 스킨 ─────────── */
 const SKINS=['classic','modern','reimagined'];
+if(!SKINS.includes(S.skin)) S.skin='reimagined';   // 저장된 값이 깨졌으면 되돌린다
 const SKIN_NAME={classic:'기존',modern:'개선',reimagined:'재해석'};
 const SKIN_BG={classic:'#D3D3D3',modern:'#0e1116',reimagined:'#07080a'};
 function applySkin(){
