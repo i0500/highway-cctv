@@ -189,6 +189,17 @@ body.reimagined .cell .rf{top:auto;bottom:6px;right:38px;width:26px;height:26px;
 #empty{position:absolute;inset:0;display:grid;place-items:center;color:#eee;font-size:14px;
   text-align:center;padding:20px;pointer-events:none}
 #empty.hide{display:none}
+/* 크게 보기 — 나머지는 감추기만 하고 재생은 그대로 둔다(다시 돌아올 때 즉시 보임) */
+#grid.zoomed .gridrow{display:none}
+#grid.zoomed .gridrow.hasZoom{display:flex;flex:1 1 100%}
+#grid.zoomed .cell{display:none}
+#grid.zoomed .cell.zoom{display:block;flex:1 1 100%}
+.cell .zm{position:absolute;top:2px;right:49px;width:22px;height:20px;display:grid;
+  place-items:center;font-size:12px;color:var(--dim);background:transparent}
+.cell .zm:hover{color:var(--acc)}
+body.reimagined .cell .zm{top:auto;bottom:6px;right:70px;width:26px;height:26px;
+  background:rgba(0,0,0,.5);border-radius:50%;color:#fff}
+#grid.zoomed .cell.zoom .zm{color:var(--acc)}
 
 /* 시트 */
 .sheet{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;z-index:900;
@@ -292,7 +303,6 @@ body.classic .sheet-in{border:2px solid #888}
     <div style="margin-top:14px">
       <div style="font-size:13px;font-weight:700">지연 우선순위</div>
       <div class="seg" id="segLive">
-        <button data-m="lock">라이브 고정<small style="display:block;font-size:10.5px;opacity:.75">1.5초 유지</small></button>
         <button data-m="live" class="on">라이브 우선<small style="display:block;font-size:10.5px;opacity:.75">기본</small></button>
         <button data-m="bal">균형<small style="display:block;font-size:10.5px;opacity:.75">안정 위주</small></button>
         <button data-m="safe">안정<small style="display:block;font-size:10.5px;opacity:.75">거의 안 끊김</small></button>
@@ -329,16 +339,16 @@ const LS={get:(k,d)=>{try{return JSON.parse(localStorage.getItem('cv_'+k))??d}ca
           set:(k,v)=>{try{localStorage.setItem('cv_'+k,JSON.stringify(v))}catch(_){}},
           del:k=>{try{localStorage.removeItem('cv_'+k)}catch(_){}}};
 
-/* 즐겨찾기 초기값 — 구간의 주요 지점 몇 개만. 나머지는 ★ 로 직접 추가한다.
-   전부를 즐겨찾기로 두면 'CCTV 목록'과 구분이 사라진다. */
-const DEFAULT_FAVS = CAMS.filter(c=>/북천안|천안분기점|목천|옥산|청주$|남이분기점/.test(c.n))
-                         .map(c=>c.n);
+/* 즐겨찾기 초기값 — 구간을 대표하는 12개. 나머지는 ★ 로 직접 추가한다. */
+const FAV_NAMES=['망향휴게소','북천안','천안','천안분기점','천안휴게소','목천',
+                 '병천2교','옥산','옥산휴게소','미호천교','청주','청주휴게소'];
+const DEFAULT_FAVS = FAV_NAMES.filter(n=>CAMS.some(c=>c.n===n));
 const S={
   open:[],                                  // 재생 중인 카메라 [{cam,hls,cell}]
   active:0, skin:LS.get('skin','reimagined'), mode:LS.get('mode','live'),
-  favs:LS.get('favs', DEFAULT_FAVS.length?DEFAULT_FAVS:CAMS.slice(0,5).map(c=>c.n)),
-  fit:LS.get('fit',false), low:LS.get('low',false), save:LS.get('save',true),
-  sideOpen:true, colFav:true, colCam:true
+  favs:LS.get('favs', DEFAULT_FAVS.length?DEFAULT_FAVS:CAMS.slice(0,12).map(c=>c.n)),
+  fit:LS.get('fit',true), low:LS.get('low',false), save:LS.get('save',true),
+  sideOpen:true, colFav:true, colCam:true, zoom:-1
 };
 const MAX=20;
 
@@ -348,14 +358,14 @@ const MAX=20;
    무사고 구간이 이어지면 조금씩 줄이고, 한 번이라도 끊기면 즉시 늘린다. */
 /* 올릴 땐 조금만, 내릴 땐 자주 — 한 번 끊겼다고 계속 뒤처진 채로 두지 않는다.
    heal 은 '무사고 몇 초가 지나면 줄일지'. */
-/* lock 은 버퍼를 절대 올리지 않는다(min=max). 지연을 무조건 유지하고 싶을 때.
-   live 는 적응형이되, 단발성 끊김에는 반응하지 않고 반복될 때만 아주 조금 올린다. */
+/* 회선 여유를 실측해 '끊기지 않는 최소 버퍼'를 계속 추적한다.
+   live 는 단발성 끊김에 반응하지 않고 반복될 때만 아주 조금 올린다. */
 const MODES={
-  lock:{start:1.5, min:1.5, max:1.5, down:0,   up:0,   heal:99, rate:1.6, multi:0},
   live:{start:1.6, min:1.0, max:3.2, down:0.5, up:0.4, heal:8,  rate:1.5, multi:0.15},
   bal :{start:3.0, min:2.0, max:7.0, down:0.4, up:0.8, heal:14, rate:1.3, multi:0.25},
   safe:{start:6.0, min:4.0, max:12 , down:0.3, up:1.0, heal:20, rate:1.15,multi:0.35}
 };
+if(!MODES[S.mode]) S.mode='live';       // 없어진 모드가 저장돼 있으면 되돌린다
 const Tune={cur:MODES.live.start, stalls:0, sinceStall:0, seeks:0,
             lastUp:0, lastFix:0, recent:[]};
 
@@ -541,6 +551,7 @@ function makeCell(o){
   cell.className='cell';
   cell.innerHTML=`<video playsinline muted autoplay></video>
     <div class="ttl"></div>
+    <button class="zm" data-zoom="0" title="크게 보기 (더블클릭)">⛶</button>
     <button class="rf" data-reload="0" title="이 화면만 다시 연결">↻</button>
     <button class="x" data-close="0">✕</button>
     <div class="ov">연결 중…</div>`;
@@ -551,8 +562,20 @@ function touchCell(cell,o,idx){
   cell.querySelector('.ttl').textContent=`${idx+1}번 : ${o.cam.n}`;
   cell.querySelector('[data-close]').dataset.close=idx;
   cell.querySelector('[data-reload]').dataset.reload=idx;
+  cell.querySelector('[data-zoom]').dataset.zoom=idx;
   cell.classList.toggle('sel', idx===S.active);
   cell.classList.toggle('fit', !S.fit);
+  cell.classList.toggle('zoom', idx===S.zoom);
+}
+/* 크게 보기 — 레이아웃을 다시 만들지 않고 CSS 로만 감춘다.
+   숨겨진 화면도 계속 재생되므로 되돌아올 때 기다릴 필요가 없다. */
+function setZoom(i){
+  S.zoom = (S.zoom===i) ? -1 : i;
+  const g=$('#grid');
+  g.classList.toggle('zoomed', S.zoom>=0);
+  $$('.cell').forEach(c=>c.classList.toggle('zoom', +c.dataset.i===S.zoom));
+  $$('.gridrow').forEach(r=>r.classList.toggle('hasZoom', !!r.querySelector('.cell.zoom')));
+  if(S.zoom>=0){ S.active=S.zoom; $$('.cell').forEach(c=>c.classList.toggle('sel',+c.dataset.i===S.zoom)); }
 }
 /* 재배치할 때 기존 화면을 절대 다시 만들지 않는다.
    innerHTML 로 갈아엎으면 video 가 파괴되어 재생 중인 화면이 전부 끊긴다.
@@ -567,6 +590,7 @@ function render(){
   });
   g.textContent='';                       // 남은 빈 행 컨테이너 제거
   let idx=0;
+  if(S.zoom>=S.open.length) S.zoom=-1;          // 닫혀서 사라진 화면이면 해제
   rowsFor(S.open.length).forEach(cnt=>{
     const r=document.createElement('div'); r.className='gridrow';
     for(let i=0;i<cnt && idx<S.open.length;i++,idx++){
@@ -576,6 +600,8 @@ function render(){
     }
     g.appendChild(r);
   });
+  g.classList.toggle('zoomed', S.zoom>=0);
+  $$('.gridrow').forEach(r=>r.classList.toggle('hasZoom', !!r.querySelector('.cell.zoom')));
   fresh.forEach(o=>bind(o));              // 새로 만든 화면만 연결한다
   renderLists();
 }
@@ -686,9 +712,15 @@ $('#grid').onclick=e=>{
   if(x){ e.stopPropagation(); closeCam(+x.dataset.close); return; }
   const r=e.target.closest('[data-reload]');
   if(r){ e.stopPropagation(); reloadOne(+r.dataset.reload, r); return; }
+  const z=e.target.closest('[data-zoom]');
+  if(z){ e.stopPropagation(); setZoom(+z.dataset.zoom); return; }
   const c=e.target.closest('.cell');
   if(c){ S.active=+c.dataset.i; $$('.cell').forEach(el=>el.classList.toggle('sel',el===c)); }
 };
+$('#grid').addEventListener('dblclick',e=>{
+  const c=e.target.closest('.cell');
+  if(c) setZoom(+c.dataset.i);
+});
 
 /* 한 화면만 다시 연결 — 전체를 끊지 않는다 */
 function reloadOne(i, btn){
@@ -742,6 +774,7 @@ $('#sideBackdrop').onclick=()=>setSide(false);
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape') return;
   if($('#sheet').classList.contains('on')) $('#sheet').classList.remove('on');
+  else if(S.zoom>=0) setZoom(S.zoom);        // 크게 보기 해제
   else if(S.sideOpen) setSide(false);
 });
 
@@ -803,8 +836,7 @@ const openSheet=()=>{
   $('#oFit').checked=S.fit; $('#oSave').checked=S.save; $('#oLow').checked=S.low;
   $$('#segLive button').forEach(b=>b.classList.toggle('on',b.dataset.m===S.mode));
   $('#liveNote').textContent=
-    S.mode==='lock' ? '버퍼를 1.5초로 고정합니다. 오래 켜둬도 지연이 늘지 않지만, 회선이 흔들리면 그만큼 끊깁니다. 회선이 넉넉할 때 쓰세요.'
-   :S.mode==='live' ? '기본값. 12초 안에 3번 이상 끊길 때만 조금 올리고, 안정되면 8초마다 줄여 최소 지연으로 돌아옵니다.'
+    S.mode==='live' ? '기본값. 회선 여유를 실측해 끊기지 않는 최소 버퍼를 계속 찾아갑니다. 회선이 넉넉하면 여러 대를 켜도 1~2초를 유지합니다.'
    :S.mode==='bal'  ? '지연과 안정성의 중간입니다.'
    :                  '끊김을 최소화합니다. 지연은 늘어납니다.';
   $('#sheet').classList.add('on'); updateDiag();
@@ -907,9 +939,10 @@ function loadScript(a){return new Promise(r=>{let i=0;(function n(){
 
 function start(){
   const saved=S.save?LS.get('open',null):null;
+  // 저장된 화면이 있으면 그대로, 없으면 즐겨찾기 전체를 띄운다
   const list=(saved&&saved.length)
     ? saved.map(n=>CAMS.find(c=>c.n===n)).filter(Boolean)
-    : CAMS.filter(c=>/북천안|천안분기점|목천|청주/.test(c.n)).slice(0,4);
+    : CAMS.filter(c=>S.favs.includes(c.n));
   (list.length?list:[CAMS[0]]).slice(0,MAX).forEach(c=>{
     if(!S.open.some(o=>o.cam.n===c.n)) S.open.push({cam:c,hls:null,cell:null});
   });
