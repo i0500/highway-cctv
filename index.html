@@ -426,9 +426,13 @@ function hlsConfig(){
     liveMaxLatencyDuration:b+2.5,
     maxLiveSyncPlaybackRate:m.rate,
     backBufferLength:Math.max(8,b*3),
-    maxBufferLength:Math.max(8,b*3),
+    /* 앞으로 저장해 둘 양은 재생 위치(liveSyncDuration)와 별개다.
+       넉넉히 잡아도 지연은 늘지 않고 순간 장애에만 강해진다. */
+    maxBufferLength:Math.max(12,b*4),
     manifestLoadingTimeOut:8000, levelLoadingTimeOut:8000, fragLoadingTimeOut:12000,
-    ...(S.low?{capLevelToPlayerSize:true, maxBufferSize:8*1000*1000}:{})
+    /* 이 스트림은 화질이 하나뿐이라 capLevelToPlayerSize 는 효과가 없다.
+       저사양 옵션은 버퍼 상한만 낮춰 메모리·발열을 줄이는 용도로 쓴다. */
+    ...(S.low?{maxBufferSize:6*1000*1000}:{})
   };
 }
 /* 버퍼를 바꿔도 재생을 끊지 않는다 — hls.js 설정을 런타임에 갱신 */
@@ -437,6 +441,10 @@ function applyTune(){
   S.open.forEach(o=>{ if(o.hls){
     o.hls.config.liveSyncDuration=b;
     o.hls.config.liveMaxLatencyDuration=b+2.5;
+    /* 버퍼 한도도 함께 갱신한다. 예전에는 이 둘이 연결 시점 값에 묶여 있어,
+       '안정' 모드로 바꿔도 이미 열려 있던 화면은 약속한 만큼 버퍼를 쌓지 못했다. */
+    o.hls.config.backBufferLength=Math.max(8,b*3);
+    o.hls.config.maxBufferLength=Math.max(12,b*4);
   }});
   LS.set('tune',Tune.cur);
 }
@@ -647,6 +655,13 @@ function render(){
   $$('.gridrow').forEach(r=>r.classList.toggle('hasZoom', !!r.querySelector('.cell.zoom')));
   syncDense();
   fresh.forEach(o=>bind(o));              // 새로 만든 화면만 연결한다
+  /* Safari/iOS 는 DOM 에서 분리된 <video> 를 정지시킨다.
+     위에서 셀을 옮겼으므로 이미 재생 중이던 화면도 다시 눌러줘야 한다.
+     (Chrome 은 유지되지만 호출해도 무해하다) */
+  S.open.forEach(o=>{
+    const v=o.cell?.querySelector('video');
+    if(v && v.paused && !v.ended) v.play().catch(()=>{});
+  });
   renderLists();
 }
 
@@ -657,7 +672,14 @@ function bind(o){
   // 'waiting' 리스너는 makeCell 에서 이미 한 번 걸어두었다(여기서 걸면 누적된다)
   if(!(window.Hls&&Hls.isSupported())){
     if(v.canPlayType('application/vnd.apple.mpegurl')){
-      v.src=o.cam.u; v.addEventListener('loadeddata',()=>ov.classList.add('hide'),{once:true});
+      v.src=o.cam.u;
+      v.addEventListener('loadeddata',()=>ov.classList.add('hide'),{once:true});
+      /* 네이티브 재생에도 실패 처리를 건다.
+         없으면 접속 자체가 실패했을 때 '연결 중…' 인 채로 영원히 방치된다. */
+      v.addEventListener('error',()=>{
+        ov.classList.remove('hide');
+        ov.textContent='재생할 수 없습니다 — ↻ 를 눌러 다시 시도하세요';
+      },{once:true});
       v.play().catch(()=>{});
     } else ov.textContent='이 브라우저는 재생을 지원하지 않습니다';
     return;
@@ -679,9 +701,18 @@ function bind(o){
   });
   hls.on(Hls.Events.ERROR,(_e,d)=>{
     if(!d.fatal) return;
-    if(d.type===Hls.ErrorTypes.MEDIA_ERROR){ hls.recoverMediaError(); return; }
-    ov.classList.remove('hide'); ov.textContent='재생할 수 없습니다';
+    /* 복구 시도는 횟수를 제한한다. 무제한으로 돌리면 정말 복구 불가능한 상황
+       (여러 대 동시 재생으로 디코더가 모자란 경우 등)에서 오류도 안 뜬 채
+       조용히 CPU·배터리만 계속 태운다. */
+    if(d.type===Hls.ErrorTypes.MEDIA_ERROR && (o._mediaErr=(o._mediaErr||0)+1)<=3){
+      hls.recoverMediaError(); return;
+    }
+    try{ hls.destroy(); }catch(_){}
+    o.hls=null;
+    ov.classList.remove('hide');
+    ov.textContent='재생할 수 없습니다 — ↻ 를 눌러 다시 시도하세요';
   });
+  hls.on(Hls.Events.FRAG_BUFFERED,()=>{ o._mediaErr=0; });   // 정상 재생되면 초기화
   hls.loadSource(o.cam.u); hls.attachMedia(v);
 }
 
@@ -789,7 +820,21 @@ setInterval(()=>{
   let fixed=false;                     // 한 주기에 한 화면만 재연결한다
   S.open.forEach((o,i)=>{
     const v=o.cell?.querySelector('video');
-    if(!v || v.paused || v.readyState<2) return;
+    if(!v) return;
+    /* 멈춰 있으면 먼저 다시 눌러본다.
+       예전에는 paused 를 그냥 건너뛰어서, 한번 정지된 화면이
+       수동으로 ↻ 를 누르기 전까지 영영 살아나지 않았다. */
+    if(v.paused && !v.ended){ v.play().catch(()=>{}); o._lastT=-1; return; }
+    if(v.readyState<2){
+      // 재생 시작조차 못 한 채 오래 머물면 다시 연결한다
+      o._cold=(o._cold||0)+1;
+      if(o._cold>=8 && !fixed && now-Tune.lastFix>5000){
+        o._cold=0; fixed=true; Tune.lastFix=now;
+        reloadOne(i, o.cell?.querySelector('.rf'));
+      }
+      return;
+    }
+    o._cold=0;
     if(o._lastT===v.currentTime){
       o._stuck=(o._stuck||0)+1;
       if(o._stuck>=3 && !fixed && now-Tune.lastFix>5000){  // 약 6초간 진행 없음
@@ -917,8 +962,12 @@ $('#bClose').onclick=()=>$('#sheet').classList.remove('on');
 $('#sheet').onclick=e=>{if(e.target.id==='sheet')$('#sheet').classList.remove('on');};
 $('#oFit').onchange=e=>{S.fit=e.target.checked;LS.set('fit',S.fit);render();};
 $('#oSave').onchange=e=>{S.save=e.target.checked;LS.set('save',S.save);};
-$('#oLow').onchange=e=>{S.low=e.target.checked;LS.set('low',S.low);
-  S.open.forEach(o=>bind(o));};
+/* 버퍼 상한만 바꾸면 되므로 재연결하지 않는다.
+   예전에는 전체를 다시 붙여서 모든 화면이 잠깐 검게 변했다. */
+$('#oLow').onchange=e=>{
+  S.low=e.target.checked; LS.set('low',S.low);
+  S.open.forEach(o=>{ if(o.hls) o.hls.config.maxBufferSize = S.low ? 6*1000*1000 : 60*1000*1000; });
+};
 $$('#segLive button').forEach(b=>b.onclick=()=>{
   S.mode=b.dataset.m; LS.set('mode',S.mode);
   Tune.sinceStall=0; Tune.recent=[]; Tune.why='';
