@@ -192,7 +192,9 @@ body.modern .vtab{border-color:var(--line2)}
 .cell .vbox{display:none;position:absolute;z-index:2;pointer-events:auto;
   border:2px solid rgba(255,255,255,.92);border-radius:5px;cursor:grab;
   box-shadow:0 3px 14px rgba(0,0,0,.7),0 0 0 1px rgba(0,0,0,.5) inset;
-  background:#000}
+  background:#000;
+  /* 이게 없으면 손가락으로 끌 때 화면이 함께 스크롤돼 이동이 끊긴다 */
+  touch-action:none;-webkit-user-select:none;user-select:none}
 .cell.mag .vbox{display:block}
 .cell .vbox.grab{cursor:grabbing}
 /* 네모 우측 위 닫기 */
@@ -212,7 +214,8 @@ body.modern .vtab{border-color:var(--line2)}
 /* 배율 조절 — 확대 영역 바로 아래에 붙는다(자리가 없으면 위로) */
 .cell .zctl{display:none;position:absolute;z-index:4;align-items:center;gap:6px;
   padding:5px 8px;border-radius:9px;background:rgba(0,0,0,.72);
-  border:1px solid rgba(255,255,255,.18);box-shadow:0 3px 12px rgba(0,0,0,.5)}
+  border:1px solid rgba(255,255,255,.18);box-shadow:0 3px 12px rgba(0,0,0,.5);
+  touch-action:none}                     /* 막대를 만질 때도 화면이 밀리지 않게 */
 .cell.mag .zctl{display:flex}
 .cell .zctl input{width:104px;accent-color:var(--acc);margin:0}
 .cell .zctl button{width:24px;height:24px;display:grid;place-items:center;padding:0;
@@ -1010,16 +1013,21 @@ $('#grid').addEventListener('pointerdown',e=>{
   const box=e.target.closest('.vbox'); if(!box) return;
   const cell=box.closest('.cell'); const o=S.open[+cell.dataset.i]; if(!o||o.mag<=1) return;
   e.preventDefault(); e.stopPropagation();
-  box.classList.add('grab'); box.setPointerCapture(e.pointerId);
-  const r=cell.getBoundingClientRect();
+  box.classList.add('grab');
+  try{ box.setPointerCapture(e.pointerId); }catch(_){}
   const move=ev=>{
+    ev.preventDefault();
+    /* 칸 자리를 그때그때 다시 잰다 — 목록이 스크롤되면 좌표가 어긋난다 */
+    const r=cell.getBoundingClientRect();
     o.mx=Math.min(1,Math.max(0,(ev.clientX-r.left)/r.width));
     o.my=Math.min(1,Math.max(0,(ev.clientY-r.top)/r.height));
     applyMag(o);
   };
   const up=()=>{ box.classList.remove('grab');
-    box.removeEventListener('pointermove',move); box.removeEventListener('pointerup',up); };
-  box.addEventListener('pointermove',move); box.addEventListener('pointerup',up);
+    box.removeEventListener('pointermove',move);
+    box.removeEventListener('pointerup',up); box.removeEventListener('pointercancel',up); };
+  box.addEventListener('pointermove',move,{passive:false});
+  box.addEventListener('pointerup',up); box.addEventListener('pointercancel',up);
   move(e);
 });
 
