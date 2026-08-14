@@ -183,9 +183,13 @@ body.modern .cell .ttl{background:linear-gradient(rgba(0,0,0,.75),transparent);b
 body.reimagined .cell .rf{top:auto;bottom:6px;right:38px;width:26px;height:26px;
   background:rgba(0,0,0,.5);border-radius:50%;color:#fff}
 .cell.sel{outline:2px solid var(--acc);outline-offset:-2px}
+/* 오버레이는 안내만 하고 클릭은 통과시킨다.
+   예전에는 셀 전체를 덮어, 연결 중이거나 실패한 화면의 버튼을 아예 누를 수 없었다. */
 .cell .ov{position:absolute;inset:0;display:grid;place-items:center;background:rgba(0,0,0,.55);
-  color:#ccc;font-size:12px;text-align:center;padding:8px}
+  color:#ccc;font-size:12px;text-align:center;padding:8px;pointer-events:none;z-index:1}
 .cell .ov.hide{display:none}
+.cell .zm,.cell .rf,.cell .x{z-index:3}
+.cell .ttl{z-index:2}
 #empty{position:absolute;inset:0;display:grid;place-items:center;color:#eee;font-size:14px;
   text-align:center;padding:20px;pointer-events:none}
 #empty.hide{display:none}
@@ -248,19 +252,34 @@ body.classic .sheet-in{border:2px solid #888}
   #stage{flex:1 1 auto}
 
   /* 화면이 여러 개면 칸이 작아져 버튼끼리 겹친다.
-     선택한 칸에만 버튼을 보여주고, 나머지는 닫기만 남긴다. */
+     버튼 셋을 우측 상단에 나란히 몰고, 이름은 아래에 크게 둔다. */
   #grid.dense .cell .zm,
-  #grid.dense .cell .rf{display:none}
-  #grid.dense .cell.sel .zm,
-  #grid.dense .cell.sel .rf{display:grid}
-  #grid.dense .cell .ttl{font-size:10.5px;padding:2px 5px}
-  #grid.dense .cell .x{width:26px;height:24px}
-  body.reimagined #grid.dense .cell .x{bottom:4px;right:4px;width:24px;height:24px}
-  body.reimagined #grid.dense .cell.sel .rf{bottom:4px;right:32px;width:24px;height:24px}
-  body.reimagined #grid.dense .cell.sel .zm{bottom:4px;right:60px;width:24px;height:24px}
-  /* 확대 중에는 칸이 하나뿐이므로 버튼을 모두 되살린다 */
+  #grid.dense .cell .rf,
+  #grid.dense .cell .x{display:grid;top:4px;bottom:auto;width:28px;height:28px;
+    background:rgba(0,0,0,.55);border-radius:7px;color:#fff;font-size:13px}
+  #grid.dense .cell .zm{right:71px}
+  #grid.dense .cell .rf{right:38px}
+  #grid.dense .cell .x{right:5px}
+  /* 이름은 아래줄 전체를 쓰므로 키워도 겹치지 않는다 */
+  #grid.dense .cell .ttl{top:auto;bottom:0;font-size:13px;font-weight:700;
+    padding:18px 8px 7px 8px;background:linear-gradient(transparent,rgba(0,0,0,.88));
+    border:none;color:#fff;text-shadow:0 1px 3px #000}
+  /* 확대 중에는 칸이 하나뿐이라 넉넉하게 */
   #grid.dense.zoomed .cell.zoom .zm,
-  #grid.dense.zoomed .cell.zoom .rf{display:grid}
+  #grid.dense.zoomed .cell.zoom .rf,
+  #grid.dense.zoomed .cell.zoom .x{width:36px;height:36px;font-size:16px}
+  #grid.dense.zoomed .cell.zoom .zm{right:88px}
+  #grid.dense.zoomed .cell.zoom .rf{right:47px}
+  #grid.dense.zoomed .cell.zoom .x{right:6px}
+  #grid.dense.zoomed .cell.zoom .ttl{font-size:15px;padding:22px 10px 9px 10px}
+  /* 재해석은 상단바가 영상 위에 떠 있다.
+     첫 줄 버튼을 그대로 두면 상단바에 가려 눌리지 않으므로 그 아래로 내린다. */
+  body.reimagined #grid.dense .gridrow:first-child .cell .zm,
+  body.reimagined #grid.dense .gridrow:first-child .cell .rf,
+  body.reimagined #grid.dense .gridrow:first-child .cell .x,
+  body.reimagined #grid.dense.zoomed .cell.zoom .zm,
+  body.reimagined #grid.dense.zoomed .cell.zoom .rf,
+  body.reimagined #grid.dense.zoomed .cell.zoom .x{top:calc(78px + var(--st))}
 }
 </style>
 </head>
