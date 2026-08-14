@@ -186,11 +186,13 @@ body.modern .vtab{border-color:var(--line2)}
 /* W·E 로 조절하는 명암 — 야간 화면을 볼 때 쓴다.
    돋보기(--mag)는 화면 하나하나에 따로 걸린다. */
 .cell video{width:100%;height:100%;object-fit:contain;background:#000;display:block;
-  filter:contrast(var(--vfx,1));transform:scale(var(--mag,1));transform-origin:center}
-/* 돋보기로 확대하면 원본 어디를 보고 있는지 네모로 알려준다. 끌어서 옮긴다. */
+  filter:contrast(var(--vfx,1))}
+/* 돋보기 — 네모 안쪽만 당겨서 보여준다. 바깥은 원래 크기 그대로라 위치를 잃지 않는다.
+   네모 크기는 배율과 무관하게 고정이라 6배로 올려도 끌기 어려워지지 않는다. */
 .cell .vbox{display:none;position:absolute;z-index:2;pointer-events:auto;
-  border:2px solid rgba(255,255,255,.9);border-radius:4px;cursor:grab;
-  box-shadow:0 0 0 9999px rgba(0,0,0,.28),0 2px 10px rgba(0,0,0,.6)}
+  border:2px solid rgba(255,255,255,.92);border-radius:5px;cursor:grab;
+  box-shadow:0 3px 14px rgba(0,0,0,.7),0 0 0 1px rgba(0,0,0,.5) inset;
+  background:#000}
 .cell.mag .vbox{display:block}
 .cell .vbox.grab{cursor:grabbing}
 /* 배율 조절 — 확대 영역 바로 아래에 붙는다(자리가 없으면 위로) */
@@ -863,7 +865,7 @@ function makeCell(o){
     <button class="zm" data-zoom="0" title="크게 보기 (더블클릭)">⛶</button>
     <button class="rf" data-reload="0" title="이 화면만 다시 연결"><span class="ic">↻</span></button>
     <button class="x" data-close="0">✕</button>
-    <div class="vbox"></div>
+    <canvas class="vbox"></canvas>
     <div class="zctl"><button data-zs="-1">−</button><input type="range" min="1.2" max="6" step="0.2"><span></span><button data-zs="1">＋</button></div>
     <div class="bdg"></div>
     <div class="ov">연결 중…</div>`;
@@ -876,35 +878,70 @@ function makeCell(o){
 /* ── 돋보기 ─────────────────────────────────────────
    크게 보기(⛶)가 '이 화면을 화면 가득'이라면, 돋보기는 '영상 속을 당겨 보기'다.
    당긴 뒤에는 원본 어디를 보고 있는지 네모로 알려주고, 그 네모를 끌어 옮긴다. */
-const MAG=2.2;                                  // 당기는 배율
+const MAG=2.2;                                  // 처음 켤 때의 배율
+/* 영상이 칸 안에서 실제로 그려지는 자리 — object-fit:contain 이라 칸과 다르다.
+   좌우는 가운데, 위아래는 스킨에 따라 위나 가운데로 붙는다. */
+function videoRect(cell,v){
+  const cw=cell.clientWidth, ch=cell.clientHeight, vw=v.videoWidth, vh=v.videoHeight;
+  if(!vw||!vh||!cw) return null;
+  const sc=Math.min(cw/vw, ch/vh), dw=vw*sc, dh=vh*sc;
+  const op=getComputedStyle(v).objectPosition.split(' ');
+  const px=(parseFloat(op[0])||50)/100, py=(parseFloat(op[1])||50)/100;
+  return {vw,vh,dw,dh,ox:(cw-dw)*px, oy:(ch-dh)*py, cw, ch};
+}
+function drawLoupe(o){
+  const cell=o.cell, v=cell?.querySelector('video'), cv=cell?.querySelector('.vbox');
+  if(!v||!cv||o.mag<=1) return;
+  const g=videoRect(cell,v); if(!g) return;
+  const dpr=Math.min(2, devicePixelRatio||1);
+  const LW=Math.round(cv.clientWidth), LH=Math.round(cv.clientHeight);
+  if(!LW||!LH) return;
+  if(cv.width!==LW*dpr||cv.height!==LH*dpr){ cv.width=LW*dpr; cv.height=LH*dpr; }
+  const ctx=cv.getContext('2d'); if(!ctx) return;
+  // 네모 한가운데가 가리키는 지점을 영상 안 좌표로 바꾼다
+  const relX=Math.min(1,Math.max(0,(o.mx*g.cw-g.ox)/g.dw));
+  const relY=Math.min(1,Math.max(0,(o.my*g.ch-g.oy)/g.dh));
+  const sw=(LW/o.mag)*(g.vw/g.dw), sh=(LH/o.mag)*(g.vh/g.dh);
+  let sx=relX*g.vw-sw/2, sy=relY*g.vh-sh/2;
+  sx=Math.min(g.vw-sw, Math.max(0,sx)); sy=Math.min(g.vh-sh, Math.max(0,sy));
+  try{ ctx.drawImage(v, sx, sy, sw, sh, 0, 0, cv.width, cv.height); }catch(_){}
+}
+let loupeRAF=null;
+function loupeLoop(){
+  const live=S.open.filter(o=>o.mag>1);
+  live.forEach(drawLoupe);
+  loupeRAF = live.length ? requestAnimationFrame(loupeLoop) : null;
+}
 function applyMag(o){
   const v=o.cell?.querySelector('video'), box=o.cell?.querySelector('.vbox');
   if(!v) return;
   const on=o.mag>1;
   o.cell.classList.toggle('mag', on);
   const ic=o.cell.querySelector('.mg .ic'); if(ic) ic.textContent = on ? '－' : '＋';
-  if(!on){ v.style.transform=''; return; }
-  o.mx=Math.min(1-0.5/o.mag, Math.max(0.5/o.mag, o.mx ?? 0.5));
-  o.my=Math.min(1-0.5/o.mag, Math.max(0.5/o.mag, o.my ?? 0.5));
-  // 보려는 지점이 한가운데 오도록 당긴 뒤 밀어준다
-  v.style.transform=`scale(${o.mag}) translate(${((0.5-o.mx)*100).toFixed(2)}%,${((0.5-o.my)*100).toFixed(2)}%)`;
+  if(!on) return;
+  o.mx=Math.min(1,Math.max(0,o.mx ?? 0.5));
+  o.my=Math.min(1,Math.max(0,o.my ?? 0.5));
   if(box){
-    const s=100/o.mag;
-    box.style.width=s+'%'; box.style.height=s+'%';
-    box.style.left=((o.mx*100)-s/2)+'%'; box.style.top=((o.my*100)-s/2)+'%';
+    /* 네모 크기는 배율과 무관하게 고정한다 — 배율을 올릴수록 작아지면 끌 수가 없다 */
+    const r=o.cell.getBoundingClientRect();
+    const LW=Math.round(Math.min(r.width*0.5, 300));
+    const LH=Math.round(LW*9/16);
+    box.style.width=LW+'px'; box.style.height=LH+'px';
+    const left=Math.min(r.width-LW-2, Math.max(2, o.mx*r.width-LW/2));
+    const top =Math.min(r.height-LH-2, Math.max(2, o.my*r.height-LH/2));
+    box.style.left=left+'px'; box.style.top=top+'px';
     /* 배율 막대를 그 네모 바로 아래에 붙인다. 아래가 좁으면 위로 올린다. */
     const ct=o.cell.querySelector('.zctl');
     if(ct){
-      const r=o.cell.getBoundingClientRect();
-      const bTop=(o.my-0.5/o.mag)*r.height, bBot=(o.my+0.5/o.mag)*r.height;
-      const h=34, below=bBot+6+h<=r.height-4;
-      ct.style.top=(below?bBot+6:Math.max(4,bTop-6-h))+'px';
+      const h=34, below=top+LH+6+h<=r.height-4;
+      ct.style.top=(below?top+LH+6:Math.max(4,top-6-h))+'px';
       ct.style.left='50%'; ct.style.transform='translateX(-50%)';
       const inp=ct.querySelector('input'), lab=ct.querySelector('span');
       if(inp && +inp.value!==o.mag) inp.value=o.mag;
       if(lab) lab.textContent=o.mag.toFixed(1)+'x';
     }
   }
+  if(!loupeRAF) loupeRAF=requestAnimationFrame(loupeLoop);
 }
 function setMag(i,on){
   const o=S.open[i]; if(!o) return;
@@ -1280,7 +1317,9 @@ $('#bCloseSide2').onclick=()=>setSide(false);
 function syncDense(){
   $('#grid').classList.toggle('dense', narrow() && S.open.length>4);
 }
-window.addEventListener('resize',()=>{ showCol(S.listTab||'fav'); syncDense(); setSide(S.sideOpen); });
+window.addEventListener('resize',()=>{ showCol(S.listTab||'fav'); syncDense(); setSide(S.sideOpen);
+  S.open.forEach(o=>{ if(o.mag>1) applyMag(o); });   // 칸 크기가 바뀌면 돋보기 자리도 다시 잡는다
+});
 
 /* 목록 열고 닫기 — 겹쳐 뜨는 상황(재해석·모바일)에서는
    ☰ 가 가려지므로 닫기 버튼·배경 클릭·ESC 를 모두 받아준다. */
@@ -1588,7 +1627,11 @@ function resumeStreams(){
 }
 document.addEventListener('visibilitychange',()=>{
   clearTimeout(sleepTimer); sleepTimer=null;
-  if(document.visibilityState==='visible'){ keepAwake(); if(dormant) resumeStreams(); }
+  if(document.visibilityState==='visible'){
+    keepAwake(); if(dormant) resumeStreams();
+    /* 화면이 안 보이는 동안에는 그리기가 멈춘다 — 돌아오면 돋보기를 다시 돌린다 */
+    if(!loupeRAF && S.open.some(o=>o.mag>1)) loupeRAF=requestAnimationFrame(loupeLoop);
+  }
   /* 알림을 확인하는 정도의 짧은 이탈까지 끊으면 돌아올 때마다 다시 붙느라 더 답답하다.
      한동안 계속 안 보일 때만 세운다. */
   else sleepTimer=setTimeout(pauseStreams, 15000);
