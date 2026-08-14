@@ -177,9 +177,11 @@ body.modern .cell .ttl{background:linear-gradient(rgba(0,0,0,.75),transparent);b
 .cell .rf{position:absolute;top:2px;right:26px;width:22px;height:20px;display:grid;place-items:center;
   font-size:13px;color:var(--dim);background:transparent}
 .cell .rf:hover{color:var(--acc)}
-.cell .rf.spin{animation:rot .8s linear infinite}
+/* 버튼째 돌리면 배경과 테두리까지 함께 돈다 — 안쪽 아이콘만 돌린다 */
+.cell .rf .ic{display:block;line-height:1}
+.cell .rf.spin .ic{animation:rot .8s linear infinite}
 @keyframes rot{to{transform:rotate(360deg)}}
-@media(prefers-reduced-motion:reduce){.cell .rf.spin{animation:none}}
+@media(prefers-reduced-motion:reduce){.cell .rf.spin .ic{animation:none}}
 body.reimagined .cell .rf{top:auto;bottom:6px;right:38px;width:26px;height:26px;
   background:rgba(0,0,0,.5);border-radius:50%;color:#fff}
 .cell.sel{outline:2px solid var(--acc);outline-offset:-2px}
@@ -292,6 +294,7 @@ body.classic .sheet-in{border:2px solid #888}
     background:rgba(0,0,0,.42);border-radius:7px;
     font-size:11.5px;font-weight:700;color:#e7edf4;text-shadow:none;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #grid .cell .ttl .no{display:none}   /* 번호는 위치로 알 수 있다 — 이름에 자리를 준다 */
   /* 확대 중에는 여유가 있으니 크게 */
   #grid.zoomed .cell.zoom .zm,
   #grid.zoomed .cell.zoom .rf,
@@ -456,6 +459,9 @@ function bufFor(){
   const bonus=Math.max(0,(S.open.length-2))*(m.multi??0.2);
   return +(Tune.cur+Math.min(bonus,0.8)).toFixed(2);
 }
+/* 안 보이는 동안 재생을 세워둔 상태인지 — 아래 감시 타이머들이 이 값을 본다.
+   (참조하는 곳보다 반드시 먼저 선언해야 한다) */
+let dormant=false, sleepTimer=null;
 function hlsConfig(){
   const m=modeCfg(), b=bufFor();
   return {
@@ -465,15 +471,24 @@ function hlsConfig(){
        크게 잡으면 한번 밀린 뒤 영영 따라잡지 못하므로 타이트하게 둔다. */
     liveMaxLatencyDuration:b+2.5,
     maxLiveSyncPlaybackRate:m.rate,
-    backBufferLength:Math.max(8,b*3),
+    /* 지나간 구간은 되감기용인데 이 앱은 라이브 엣지로만 간다 — 짧게 잡아 메모리를 아낀다 */
+    backBufferLength:memCfg().back,
     /* 앞으로 저장해 둘 양은 재생 위치(liveSyncDuration)와 별개다.
        넉넉히 잡아도 지연은 늘지 않고 순간 장애에만 강해진다. */
-    maxBufferLength:Math.max(12,b*4),
+    maxBufferLength:Math.max(8,b*3),
     manifestLoadingTimeOut:8000, levelLoadingTimeOut:8000, fragLoadingTimeOut:12000,
-    /* 이 스트림은 화질이 하나뿐이라 capLevelToPlayerSize 는 효과가 없다.
-       저사양 옵션은 버퍼 상한만 낮춰 메모리·발열을 줄이는 용도로 쓴다. */
-    ...(S.low?{maxBufferSize:6*1000*1000}:{})
+    /* 이 스트림은 화질이 하나뿐이라 capLevelToPlayerSize 는 효과가 없다. */
+    maxBufferSize:memCfg().size
   };
+}
+/* 24시간 켜 두는 화면이다. 화면당 상한을 그대로 두면 대수만큼 곱해져
+   (기본값 60MB × 12대 = 720MB) 모바일 브라우저가 탭째 정리해 버린다.
+   총량을 정해 놓고 대수로 나눠 쓴다. */
+function memCfg(){
+  const n=Math.max(1,S.open.length);
+  if(S.low) return {size:4*1000*1000, back:0};
+  return {size:Math.min(60,Math.max(8,Math.floor(150/n)))*1000*1000,
+          back:n>6?0:4};
 }
 /* 버퍼를 바꿔도 재생을 끊지 않는다 — hls.js 설정을 런타임에 갱신 */
 function applyTune(){
@@ -483,8 +498,11 @@ function applyTune(){
     o.hls.config.liveMaxLatencyDuration=b+2.5;
     /* 버퍼 한도도 함께 갱신한다. 예전에는 이 둘이 연결 시점 값에 묶여 있어,
        '안정' 모드로 바꿔도 이미 열려 있던 화면은 약속한 만큼 버퍼를 쌓지 못했다. */
-    o.hls.config.backBufferLength=Math.max(8,b*3);
-    o.hls.config.maxBufferLength=Math.max(12,b*4);
+    /* 대수가 바뀌면 화면당 메모리 몫도 달라진다 — 함께 갱신한다 */
+    const mem=memCfg();
+    o.hls.config.backBufferLength=mem.back;
+    o.hls.config.maxBufferSize=mem.size;
+    o.hls.config.maxBufferLength=Math.max(8,b*3);
   }});
   LS.set('tune',Tune.cur);
 }
@@ -532,7 +550,7 @@ function minBuffer(){
   return isFinite(m)?m:null;
 }
 setInterval(()=>{
-  if(!S.open.length) return;
+  if(!S.open.length || dormant) return;
   const m=modeCfg();
   if(!m.up) return;                          // 고정 모드는 건드리지 않는다
   const mg=netMargin(), buf=minBuffer();
@@ -590,7 +608,7 @@ function edgeOf(hls){
     ? d.fragments[d.fragments.length-1].start+d.fragments[d.fragments.length-1].duration : null);
 }
 setInterval(()=>{
-  if(!S.open.length) return;
+  if(!S.open.length || dormant) return;
   const limit=bufFor()+2;
   // 뒤처진 화면 중 '가장 심한 하나'만 당긴다.
   // 전부 동시에 seek 하면 다 같이 버퍼를 비워 화면이 한꺼번에 멈춘다.
@@ -631,15 +649,12 @@ function rowsFor(n){
     /* 2열로 나누면 홀수일 때 한 칸이 남는다.
        남는 칸을 맨 끝에 두면 뜬금없이 혼자 커 보이므로 맨 앞에 크게 놓는다 —
        큰 화면 하나에 작은 화면 여럿이 붙는 익숙한 배치가 된다. */
+    /* 3열로 가면 칸이 136px 로 줄어 조작줄이 영상을 덮고 이름이 전부 잘린다.
+       개수가 많아도 2열을 지키고 아래로 스크롤하게 둔다. */
     if(n<=1) return [1];
-    if(n<=12){
-      const out=[]; let left=n;
-      if(n%2){ out.push(1); left--; }
-      while(left>0){ out.push(2); left-=2; }
-      return out;
-    }
-    const rows=Math.ceil(n/3), out=[]; let left=n;
-    for(let i=0;i<rows;i++){ const c=Math.min(3,Math.ceil(left/(rows-i))); out.push(c); left-=c; }
+    const out=[]; let left=n;
+    if(n%2){ out.push(1); left--; }
+    while(left>0){ out.push(2); left-=2; }
     return out;
   }
   if(SPECIAL[n]) return SPECIAL[n];
@@ -654,9 +669,9 @@ function makeCell(o){
   const cell=document.createElement('div');
   cell.className='cell';
   cell.innerHTML=`<video playsinline muted autoplay></video>
-    <div class="ttl"></div>
+    <div class="ttl"><span class="no"></span><span class="nm"></span></div>
     <button class="zm" data-zoom="0" title="크게 보기 (더블클릭)">⛶</button>
-    <button class="rf" data-reload="0" title="이 화면만 다시 연결">↻</button>
+    <button class="rf" data-reload="0" title="이 화면만 다시 연결"><span class="ic">↻</span></button>
     <button class="x" data-close="0">✕</button>
     <div class="ov">연결 중…</div>`;
   /* 끊김 감지는 셀을 만들 때 딱 한 번만 건다.
@@ -667,7 +682,9 @@ function makeCell(o){
 }
 function touchCell(cell,o,idx){
   cell.dataset.i=idx;
-  cell.querySelector('.ttl').textContent=`${idx+1}번 : ${o.cam.n}`;
+  /* 번호는 따로 둔다 — 좁은 화면에서는 자리를 이름에 내주고 숨긴다 */
+  cell.querySelector('.ttl .no').textContent=`${idx+1}번 : `;
+  cell.querySelector('.ttl .nm').textContent=o.cam.n;
   cell.querySelector('[data-close]').dataset.close=idx;
   cell.querySelector('[data-reload]').dataset.reload=idx;
   cell.querySelector('[data-zoom]').dataset.zoom=idx;
@@ -716,6 +733,8 @@ function render(){
   $$('.gridrow').forEach(r=>r.classList.toggle('hasZoom', !!r.querySelector('.cell.zoom')));
   syncDense();
   fresh.forEach(o=>bind(o));              // 새로 만든 화면만 연결한다
+  /* 대수가 바뀌면 화면당 버퍼·메모리 몫이 달라진다 — 이미 열린 화면에도 반영한다 */
+  applyTune();
   /* Safari/iOS 는 DOM 에서 분리된 <video> 를 정지시킨다.
      위에서 셀을 옮겼으므로 이미 재생 중이던 화면도 다시 눌러줘야 한다.
      (Chrome 은 유지되지만 호출해도 무해하다) */
@@ -747,6 +766,9 @@ function bind(o){
   }
   const hls=new Hls(hlsConfig()); o.hls=hls;
   o.margins=o.margins||[];
+  /* 다시 붙이는 것은 새 출발이다. 이 값을 넘겨받으면 지난번에 3번을 채운 화면이
+     새 연결에서 첫 오류에 곧바로 포기해 영영 살아나지 못한다. */
+  o._mediaErr=0;
   hls.on(Hls.Events.MANIFEST_PARSED,()=>v.play().catch(()=>{}));
   hls.on(Hls.Events.FRAG_BUFFERED,()=>ov.classList.add('hide'));
   /* 조각 길이 ÷ 실제 다운로드 시간 = 회선 여유 배수.
@@ -773,7 +795,7 @@ function bind(o){
     ov.classList.remove('hide');
     ov.textContent='재생할 수 없습니다 — ↻ 를 눌러 다시 시도하세요';
   });
-  hls.on(Hls.Events.FRAG_BUFFERED,()=>{ o._mediaErr=0; });   // 정상 재생되면 초기화
+  hls.on(Hls.Events.FRAG_BUFFERED,()=>{ o._mediaErr=0; o._tries=0; }); // 정상 재생되면 초기화
   hls.loadSource(o.cam.u); hls.attachMedia(v);
 }
 
@@ -788,7 +810,13 @@ function openCam(cam){
 function closeCam(i){
   const o=S.open[i]; if(!o) return;
   if(o.hls){ try{o.hls.destroy();}catch(_){} }
-  if(o.cell) o.cell.remove();          // 닫힌 화면만 DOM 에서 뺀다
+  if(o.cell){
+    /* hls.js 를 못 쓰는 브라우저(아이폰)는 video 에 주소를 직접 물린다.
+       DOM 에서 빼기만 하면 그 연결이 남아 계속 받는다 — 명시적으로 끊는다. */
+    const v=o.cell.querySelector('video');
+    if(v){ try{ v.pause(); v.removeAttribute('src'); v.load(); }catch(_){} }
+    o.cell.remove();                   // 닫힌 화면만 DOM 에서 뺀다
+  }
   S.open.splice(i,1);
   /* splice 로 뒤쪽 항목이 한 칸씩 당겨진다.
      zoom·active 는 '번호'가 아니라 '보고 있던 화면'을 따라가야 한다.
@@ -880,8 +908,14 @@ function reloadOne(i, btn){
 /* 멈춤 자동 복구 — 재생 중인데 시간이 안 흐르면 그 화면만 조용히 다시 연결한다.
    여러 대를 동시에 볼 때 한 대가 굳어버리는 상황을 사용자가 눈치채기 전에 되살린다. */
 setInterval(()=>{
+  // 절전으로 세워둔 동안에는 되살리지 않는다
+  if(dormant) return;
   const now=Date.now();
-  let fixed=false;                     // 한 주기에 한 화면만 재연결한다
+  /* 한 주기에 한 화면만 다시 붙인다 — 전부 동시에 붙이면 회선을 서로 빼앗아
+     멀쩡하던 화면까지 같이 끊긴다.
+     다만 앞 번호부터 찾으면 1번이 계속 말썽일 때 뒤 번호는 순서가 영영 오지 않는다.
+     그래서 '가장 오래 멈춰 있는 하나'를 골라 되살린다. */
+  let worst=null, worstScore=0;
   S.open.forEach((o,i)=>{
     const v=o.cell?.querySelector('video');
     if(!v) return;
@@ -889,26 +923,29 @@ setInterval(()=>{
        예전에는 paused 를 그냥 건너뛰어서, 한번 정지된 화면이
        수동으로 ↻ 를 누르기 전까지 영영 살아나지 않았다. */
     if(v.paused && !v.ended){ v.play().catch(()=>{}); o._lastT=-1; return; }
-    if(v.readyState<2){
-      // 재생 시작조차 못 한 채 오래 머물면 다시 연결한다
+    let score=0;
+    if(v.readyState<2){                // 재생 시작조차 못 한 채 머무는 중
       o._cold=(o._cold||0)+1;
-      if(o._cold>=8 && !fixed && now-Tune.lastFix>5000){
-        o._cold=0; fixed=true; Tune.lastFix=now;
-        reloadOne(i, o.cell?.querySelector('.rf'));
-      }
-      return;
+      if(o._cold>=8) score=o._cold;
+    } else {
+      o._cold=0;
+      if(o._lastT===v.currentTime){    // 재생 중인데 시간이 안 흐른다
+        o._stuck=(o._stuck||0)+1;
+        if(o._stuck>=3) score=o._stuck*3;   // 약 6초간 진행 없음 — 더 급한 증상
+      } else o._stuck=0;
+      o._lastT=v.currentTime;
     }
-    o._cold=0;
-    if(o._lastT===v.currentTime){
-      o._stuck=(o._stuck||0)+1;
-      if(o._stuck>=3 && !fixed && now-Tune.lastFix>5000){  // 약 6초간 진행 없음
-        o._stuck=0; fixed=true; Tune.lastFix=now;
-        onStall();                     // 버퍼도 함께 늘린다(4초 내 중복은 무시됨)
-        reloadOne(i, o.cell?.querySelector('.rf'));
-      }
-    } else o._stuck=0;
-    o._lastT=v.currentTime;
+    /* 살아나지 못하는 화면을 2초마다 다시 붙이면 회선만 태우고 남은 화면까지 방해한다.
+       실패가 이어질수록 간격을 벌린다(8초→최대 2분). 한 번 성공하면 다시 짧아진다. */
+    const wait=Math.min(120000, 8000*Math.pow(2, Math.min(4, o._tries||0)));
+    if(score && now-(o._lastTry||0)>wait && score>worstScore){ worst={o,i}; worstScore=score; }
   });
+  if(worst){
+    const {o,i}=worst;
+    o._cold=0; o._stuck=0; o._lastTry=now; o._tries=(o._tries||0)+1;
+    onStall();                         // 버퍼도 함께 늘린다(4초 내 중복은 무시됨)
+    reloadOne(i, o.cell?.querySelector('.rf'));
+  }
 },2000);
 
 /* ─────────── 세로 탭 (원본 재현) ─────────── */
@@ -1030,7 +1067,7 @@ $('#oSave').onchange=e=>{S.save=e.target.checked;LS.set('save',S.save);};
    예전에는 전체를 다시 붙여서 모든 화면이 잠깐 검게 변했다. */
 $('#oLow').onchange=e=>{
   S.low=e.target.checked; LS.set('low',S.low);
-  S.open.forEach(o=>{ if(o.hls) o.hls.config.maxBufferSize = S.low ? 6*1000*1000 : 60*1000*1000; });
+  applyTune();                         // 버퍼·메모리 몫을 한꺼번에 다시 계산한다
 };
 $$('#segLive button').forEach(b=>b.onclick=()=>{
   S.mode=b.dataset.m; LS.set('mode',S.mode);
@@ -1133,8 +1170,30 @@ async function keepAwake(){
     wake.addEventListener('release',()=>{ wake=null; });
   }catch(e){}                          // 배터리 절약 모드 등에서는 거부된다 — 무시
 }
+/* 화면이 꺼지거나 다른 앱으로 넘어가면 열두 대를 계속 받을 이유가 없다.
+   그대로 두면 배터리·데이터만 태우고, 돌아와도 어차피 한참 밀린 화면을 다시 당겨야 한다.
+   24시간 켜 두는 쓰임이라 이 차이가 크다. */
+function pauseStreams(){
+  dormant=true;
+  S.open.forEach(o=>{
+    try{ o.hls && o.hls.stopLoad(); }catch(_){}
+    const v=o.cell?.querySelector('video'); if(v) v.pause();
+  });
+}
+function resumeStreams(){
+  dormant=false;
+  S.open.forEach(o=>{
+    try{ o.hls && o.hls.startLoad(); }catch(_){}
+    const v=o.cell?.querySelector('video'); if(v) v.play().catch(()=>{});
+  });
+  // 밀린 만큼은 엣지 복귀 감시가 알아서 당긴다
+}
 document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='visible') keepAwake();
+  clearTimeout(sleepTimer); sleepTimer=null;
+  if(document.visibilityState==='visible'){ keepAwake(); if(dormant) resumeStreams(); }
+  /* 알림을 확인하는 정도의 짧은 이탈까지 끊으면 돌아올 때마다 다시 붙느라 더 답답하다.
+     한동안 계속 안 보일 때만 세운다. */
+  else sleepTimer=setTimeout(pauseStreams, 15000);
 });
 
 function start(){

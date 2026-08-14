@@ -2,3 +2,5 @@
 admin.html
 # 계정 파일은 필요할 때만 수동으로 추가
 accounts.json
+# 검증용 임시 하니스
+_*.html
