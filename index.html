@@ -197,6 +197,19 @@ body.modern .cell .ttl{background:linear-gradient(rgba(0,0,0,.75),transparent);b
   font-size:13px;color:var(--dim);background:transparent}
 .cell .rf:hover{color:var(--acc)}
 /* 버튼째 돌리면 배경과 테두리까지 함께 돈다 — 안쪽 아이콘만 돌린다 */
+/* 화면마다 받는 속도와 라이브 지연을 띄운다 — 어느 카메라가 말썽인지 바로 보인다 */
+.cell .bdg{position:absolute;top:5px;right:5px;z-index:3;padding:2px 7px;
+  border-radius:6px;background:rgba(0,0,0,.55);color:#cfd8e3;
+  font-size:10.5px;font-weight:600;font-variant-numeric:tabular-nums;
+  pointer-events:none;white-space:nowrap;letter-spacing:.2px}
+.cell .bdg:empty{display:none}
+.cell.slow .bdg{background:rgba(90,62,0,.78);color:#ffd479}
+/* 기존·개선 스킨은 넓은 화면에서 우측 상단을 버튼이 쓰므로 반대편으로 비킨다 */
+body.classic .cell .bdg,body.modern .cell .bdg{right:auto;left:5px;top:26px}
+/* 카메라 쪽이 실시간보다 느리게 보내는 화면 — 앱 탓이 아님을 알려준다 */
+.cell.slow .ttl{color:#ffd479}
+.cell.slow .ttl::after{content:'· 소스 느림';margin-left:5px;font-size:11px;
+  opacity:.9;white-space:nowrap;font-weight:400}
 .cell .rf .ic{display:block;line-height:1}
 .cell .rf.spin .ic{animation:rot .8s linear infinite}
 @keyframes rot{to{transform:rotate(360deg)}}
@@ -314,6 +327,9 @@ body.classic .sheet-in{border:2px solid #888}
     font-size:11.5px;font-weight:700;color:#e7edf4;text-shadow:none;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #grid .cell .ttl .no{display:none}   /* 번호는 위치로 알 수 있다 — 이름에 자리를 준다 */
+  /* 좁은 화면은 조작줄이 아래에 있어 우측 상단이 비어 있다 */
+  body.classic .cell .bdg,body.modern .cell .bdg{right:5px;left:auto;top:5px}
+  .cell .bdg{font-size:10px;padding:2px 6px}
   /* 확대 중에는 여유가 있으니 크게 */
   #grid.zoomed .cell.zoom .zm,
   #grid.zoomed .cell.zoom .rf,
@@ -633,7 +649,7 @@ setInterval(()=>{
   // 전부 동시에 seek 하면 다 같이 버퍼를 비워 화면이 한꺼번에 멈춘다.
   let worst=null, worstBehind=limit;
   S.open.forEach(o=>{
-    if(!o.hls) return;
+    if(!o.hls || o.slow) return;       // 소스가 느린 화면은 당길수록 버퍼만 마른다
     const v=o.cell?.querySelector('video');
     if(!v || v.paused || v.readyState<2 || v.seeking) return;
     const edge=edgeOf(o.hls);
@@ -692,6 +708,7 @@ function makeCell(o){
     <button class="zm" data-zoom="0" title="크게 보기 (더블클릭)">⛶</button>
     <button class="rf" data-reload="0" title="이 화면만 다시 연결"><span class="ic">↻</span></button>
     <button class="x" data-close="0">✕</button>
+    <div class="bdg"></div>
     <div class="ov">연결 중…</div>`;
   /* 끊김 감지는 셀을 만들 때 딱 한 번만 건다.
      bind() 는 재연결마다 호출되므로 거기서 걸면 리스너가 쌓여
@@ -799,6 +816,7 @@ function bind(o){
       const dur=(d.frag?.duration||1)*1000;
       o.margins.push(dur/ms);
       if(o.margins.length>8) o.margins.shift();
+      o.lastMs=Math.round(ms);          // 배지에 그대로 띄운다
     }catch(_){}
   });
   hls.on(Hls.Events.ERROR,(_e,d)=>{
@@ -938,6 +956,26 @@ function healTick(){
   S.open.forEach((o,i)=>{
     const v=o.cell?.querySelector('video');
     if(!v) return;
+    /* 카메라 쪽 인코더가 실시간보다 느리게 조각을 뱉는 경우가 있다(실측 1/3 속도).
+       그런 화면을 라이브로 당기고 1.5배로 재생하면 버퍼만 더 빨리 비워 계속 끊긴다.
+       조각이 늘어나는 속도를 재서 느린 소스는 따로 다룬다. */
+    const edge=edgeOf(o.hls);
+    if(edge!=null && isFinite(edge)){
+      if(o._pe!=null && edge>=o._pe){
+        const per=(edge-o._pe)/2;      // 2초 주기 → 초당 몇 초치가 생산되는가
+        o._rate = o._rate==null ? per : o._rate*0.75 + per*0.25;
+      }
+      o._pe=edge;
+    }
+    o.slow = o._rate!=null && o._rate<0.75;   // 실시간의 75% 미만이면 느린 소스
+    o.cell?.classList.toggle('slow', o.slow);
+    /* 느린 소스를 재촉하지 않는다 — 있는 만큼 그대로 흘린다.
+       다시 붙을 때마다 설정이 원래대로 돌아오므로 매번 확인한다. */
+    const want = o.slow ? 1 : modeCfg().rate;
+    if(o.hls && o.hls.config.maxLiveSyncPlaybackRate!==want)
+      o.hls.config.maxLiveSyncPlaybackRate=want;
+    if(o.slow && v.playbackRate>1) v.playbackRate=1;
+
     let score=0;
     if(v.paused && !v.ended){
       /* 멈춰 있으면 먼저 다시 눌러본다.
@@ -955,9 +993,12 @@ function healTick(){
         if(o._cold>=8) score=o._cold;
       } else {
         o._cold=0;
-        if(o._lastT===v.currentTime){  // 재생 중인데 시간이 안 흐른다
+        /* 딱 멈춘 것만 세면 2초에 0.1초씩 기어가는 화면을 정상으로 넘겨버린다.
+           다만 소스가 느린 화면은 느린 게 정상이므로 완전 정지만 본다. */
+        const adv = o._lastT==null ? null : v.currentTime-o._lastT;
+        if(adv!=null && adv < (o.slow?0.02:0.4)){
           o._stuck=(o._stuck||0)+1;
-          if(o._stuck>=3) score=o._stuck*3;  // 약 6초간 진행 없음 — 더 급한 증상
+          if(o._stuck>=3) score=o._stuck*3;  // 약 6초간 제자리 — 더 급한 증상
         } else o._stuck=0;
         o._lastT=v.currentTime;
       }
@@ -1138,6 +1179,16 @@ setInterval(()=>{
   if(d==null||!isFinite(d)){ el.textContent='—'; el.className='live'; }
   else { el.textContent='라이브 -'+d.toFixed(1)+'초';
          el.className='live '+(d<2.5?'g':d<5?'y':'r'); }
+  /* 화면마다 조각 받는 데 걸린 시간과 현재 라이브 지연을 띄운다 */
+  S.open.forEach(x=>{
+    const b=x.cell?.querySelector('.bdg'); if(!b) return;
+    const xv=x.cell.querySelector('video');
+    let lag=null;
+    try{ const e=edgeOf(x.hls);
+      if(e!=null && isFinite(e) && xv && xv.currentTime>0) lag=e-xv.currentTime; }catch(_){}
+    b.textContent = (x.lastMs!=null ? x.lastMs+'ms' : '—')
+                  + (lag!=null && isFinite(lag) ? ' · '+lag.toFixed(1)+'초' : '');
+  });
   updateDiag();
 },500);
 
