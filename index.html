@@ -624,7 +624,12 @@ function diagRow(o,i){
   const q=v&&v.getVideoPlaybackQuality?v.getVideoPlaybackQuality():null;
   let lag=null,buf=0;
   try{ const e=edgeOf(o.hls);
-    if(e!=null&&isFinite(e)&&v&&v.currentTime>0) lag=+(e-v.currentTime).toFixed(2); }catch(_){}
+    if(e!=null&&isFinite(e)&&v&&v.currentTime>0){
+      const d=e-v.currentTime;
+      /* 다시 붙는 순간에는 새 시간축과 옛 재생 위치가 잠깐 어긋난다 —
+         그 값을 그대로 기록하면 평균이 통째로 망가진다(실측 -8291초). */
+      lag = (d>=-0.5 && d<600) ? +d.toFixed(2) : null;
+    } }catch(_){}
   try{ for(let k=0;k<v.buffered.length;k++)
     if(v.buffered.start(k)<=v.currentTime&&v.currentTime<=v.buffered.end(k))
       buf=+(v.buffered.end(k)-v.currentTime).toFixed(2); }catch(_){}
@@ -1104,6 +1109,13 @@ function bind(o){
   const v=o.cell.querySelector('video');
   const ov=o.cell.querySelector('.ov');
   if(o.hls){ try{o.hls.destroy();}catch(_){} }
+  /* 앞의 것을 떼어내도 video 는 그대로라 재생 위치가 남는다.
+     새로 붙는 스트림은 시간축이 0 부터 다시 시작하므로, 남은 위치(예: 3300초)가
+     새 시간축(예: 20초)과 어긋나 한참을 못 붙고 멈춰 있었다. 비우고 시작한다. */
+  if(o._started){
+    try{ v.pause(); v.removeAttribute('src'); v.load(); }catch(_){}
+    o._started=0; o._lastT=-1;
+  }
   // 'waiting' 리스너는 makeCell 에서 이미 한 번 걸어두었다(여기서 걸면 누적된다)
   if(!(window.Hls&&Hls.isSupported())){
     if(v.canPlayType('application/vnd.apple.mpegurl')){
