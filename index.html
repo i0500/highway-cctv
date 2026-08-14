@@ -352,35 +352,46 @@ const MODES={
   bal :{start:3.0, min:2.0, max:7.0, down:0.4, up:0.8, heal:14, rate:1.3},
   safe:{start:6.0, min:4.0, max:12 , down:0.3, up:1.0, heal:20, rate:1.15}
 };
-const Tune={cur:MODES.live.start, stalls:0, sinceStall:0, seeks:0};
+const Tune={cur:MODES.live.start, stalls:0, sinceStall:0, seeks:0, lastUp:0, lastFix:0};
 
 function modeCfg(){ return MODES[S.mode]||MODES.live; }
+/* 여러 대를 동시에 보면 대역폭이 나뉘어 조각 도착이 들쭉날쭉해진다.
+   2대를 넘어가는 만큼 버퍼를 조금씩 더 준다. */
+function bufFor(){
+  const bonus=Math.max(0,(S.open.length-2))*0.25;
+  return +(Tune.cur+Math.min(bonus,1.5)).toFixed(2);
+}
 function hlsConfig(){
-  const m=modeCfg();
+  const m=modeCfg(), b=bufFor();
   return {
     lowLatencyMode:true, enableWorker:true,
-    liveSyncDuration:Tune.cur,
+    liveSyncDuration:b,
     /* 이 값을 넘게 뒤처지면 hls.js 가 스스로 라이브 엣지로 복귀한다.
        크게 잡으면 한번 밀린 뒤 영영 따라잡지 못하므로 타이트하게 둔다. */
-    liveMaxLatencyDuration:Tune.cur+2.5,
+    liveMaxLatencyDuration:b+2.5,
     maxLiveSyncPlaybackRate:m.rate,
-    backBufferLength:Math.max(8,Tune.cur*3),
-    maxBufferLength:Math.max(8,Tune.cur*3),
+    backBufferLength:Math.max(8,b*3),
+    maxBufferLength:Math.max(8,b*3),
     manifestLoadingTimeOut:8000, levelLoadingTimeOut:8000, fragLoadingTimeOut:12000,
     ...(S.low?{capLevelToPlayerSize:true, maxBufferSize:8*1000*1000}:{})
   };
 }
 /* 버퍼를 바꿔도 재생을 끊지 않는다 — hls.js 설정을 런타임에 갱신 */
 function applyTune(){
+  const b=bufFor();
   S.open.forEach(o=>{ if(o.hls){
-    o.hls.config.liveSyncDuration=Tune.cur;
-    o.hls.config.liveMaxLatencyDuration=Tune.cur+2.5;
+    o.hls.config.liveSyncDuration=b;
+    o.hls.config.liveMaxLatencyDuration=b+2.5;
   }});
   LS.set('tune',Tune.cur);
 }
+/* 여러 화면이 연달아 끊겨도 버퍼는 한 번만 올린다.
+   4대가 동시에 끊겼다고 4단계를 뛰면 지연이 순식간에 커진다. */
 function onStall(){
-  const m=modeCfg();
-  Tune.stalls++; Tune.sinceStall=0;
+  const m=modeCfg(), now=Date.now();
+  Tune.sinceStall=0;
+  if(now-Tune.lastUp < 4000) return;
+  Tune.lastUp=now; Tune.stalls++;
   if(Tune.cur < m.max){
     Tune.cur=Math.min(m.max, +(Tune.cur+m.up).toFixed(2));
     applyTune();
@@ -406,6 +417,11 @@ function edgeOf(hls){
     ? d.fragments[d.fragments.length-1].start+d.fragments[d.fragments.length-1].duration : null);
 }
 setInterval(()=>{
+  if(!S.open.length) return;
+  const limit=bufFor()+2;
+  // 뒤처진 화면 중 '가장 심한 하나'만 당긴다.
+  // 전부 동시에 seek 하면 다 같이 버퍼를 비워 화면이 한꺼번에 멈춘다.
+  let worst=null, worstBehind=limit;
   S.open.forEach(o=>{
     if(!o.hls) return;
     const v=o.cell?.querySelector('video');
@@ -413,17 +429,18 @@ setInterval(()=>{
     const edge=edgeOf(o.hls);
     if(edge==null || !isFinite(edge) || v.currentTime<=0) return;
     const behind=edge-v.currentTime;
-    // 목표 + 2초 이상 뒤처지면 당긴다. 조각 하나만큼은 남겨 두어 바로 끊기지 않게.
-    if(behind > Tune.cur+2){
-      const target=Math.max(0, edge-Math.max(1.0, Tune.cur*0.8));
-      try{
-        const buf=v.buffered;
-        let ok=false;
-        for(let i=0;i<buf.length;i++) if(target>=buf.start(i)&&target<=buf.end(i)) ok=true;
-        if(ok){ v.currentTime=target; Tune.seeks++; }
-      }catch(_){}
-    }
+    if(behind>worstBehind){ worst={o,v,edge}; worstBehind=behind; }
   });
+  if(!worst) return;
+  const target=Math.max(0, worst.edge-Math.max(1.0, bufFor()*0.8));
+  try{
+    const buf=worst.v.buffered;
+    for(let i=0;i<buf.length;i++){
+      if(target>=buf.start(i)&&target<=buf.end(i)){
+        worst.v.currentTime=target; Tune.seeks++; break;
+      }
+    }
+  }catch(_){}
 },3000);
 
 /* ─────────── 레이아웃 (기존 프로그램 규칙 그대로) ───────────
@@ -598,14 +615,16 @@ function reloadOne(i, btn){
 /* 멈춤 자동 복구 — 재생 중인데 시간이 안 흐르면 그 화면만 조용히 다시 연결한다.
    여러 대를 동시에 볼 때 한 대가 굳어버리는 상황을 사용자가 눈치채기 전에 되살린다. */
 setInterval(()=>{
+  const now=Date.now();
+  let fixed=false;                     // 한 주기에 한 화면만 재연결한다
   S.open.forEach((o,i)=>{
     const v=o.cell?.querySelector('video');
     if(!v || v.paused || v.readyState<2) return;
     if(o._lastT===v.currentTime){
       o._stuck=(o._stuck||0)+1;
-      if(o._stuck>=3){          // 약 6초간 진행 없음
-        o._stuck=0;
-        onStall();              // 버퍼도 함께 늘린다
+      if(o._stuck>=3 && !fixed && now-Tune.lastFix>5000){  // 약 6초간 진행 없음
+        o._stuck=0; fixed=true; Tune.lastFix=now;
+        onStall();                     // 버퍼도 함께 늘린다(4초 내 중복은 무시됨)
         reloadOne(i, o.cell?.querySelector('.rf'));
       }
     } else o._stuck=0;
@@ -722,7 +741,10 @@ $('#bFavAll').onclick=()=>{
 /* ─────────── 라이브 표시 ─────────── */
 function updateDiag(){
   if(!$('#sheet').classList.contains('on')) return;
-  $('#diag').innerHTML=`현재 버퍼 <b>${Tune.cur.toFixed(1)}초</b> · 재생 ${S.open.length}대`+
+  const b=bufFor();
+  $('#diag').innerHTML=`버퍼 <b>${b.toFixed(1)}초</b>`+
+    (b>Tune.cur?` <span style="opacity:.7">(기본 ${Tune.cur.toFixed(1)} + 다중재생 보정)</span>`:'')+
+    ` · 재생 ${S.open.length}대`+
     (Tune.stalls?` · 버퍼 보정 ${Tune.stalls}회`:'')+
     (Tune.seeks?` · 라이브 복귀 ${Tune.seeks}회`:'');
 }
