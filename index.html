@@ -907,7 +907,7 @@ function reloadOne(i, btn){
 
 /* 멈춤 자동 복구 — 재생 중인데 시간이 안 흐르면 그 화면만 조용히 다시 연결한다.
    여러 대를 동시에 볼 때 한 대가 굳어버리는 상황을 사용자가 눈치채기 전에 되살린다. */
-setInterval(()=>{
+function healTick(){
   // 절전으로 세워둔 동안에는 되살리지 않는다
   if(dormant) return;
   const now=Date.now();
@@ -919,21 +919,29 @@ setInterval(()=>{
   S.open.forEach((o,i)=>{
     const v=o.cell?.querySelector('video');
     if(!v) return;
-    /* 멈춰 있으면 먼저 다시 눌러본다.
-       예전에는 paused 를 그냥 건너뛰어서, 한번 정지된 화면이
-       수동으로 ↻ 를 누르기 전까지 영영 살아나지 않았다. */
-    if(v.paused && !v.ended){ v.play().catch(()=>{}); o._lastT=-1; return; }
     let score=0;
-    if(v.readyState<2){                // 재생 시작조차 못 한 채 머무는 중
-      o._cold=(o._cold||0)+1;
-      if(o._cold>=8) score=o._cold;
+    if(v.paused && !v.ended){
+      /* 멈춰 있으면 먼저 다시 눌러본다.
+         다만 눌러도 안 살아나는 경우가 있다(디코더가 모자라거나 자동재생이 막힌 경우).
+         예전에는 여기서 그냥 넘어가 버려 그런 화면은 누르기만 반복하며
+         영영 멈춘 채 남았다 — 오래 끌면 아예 다시 붙인다. */
+      v.play().catch(()=>{});
+      o._lastT=-1;
+      o._dead=(o._dead||0)+1;
+      if(o._dead>=5) score=o._dead*2;  // 10초 넘게 눌러도 그대로면
     } else {
-      o._cold=0;
-      if(o._lastT===v.currentTime){    // 재생 중인데 시간이 안 흐른다
-        o._stuck=(o._stuck||0)+1;
-        if(o._stuck>=3) score=o._stuck*3;   // 약 6초간 진행 없음 — 더 급한 증상
-      } else o._stuck=0;
-      o._lastT=v.currentTime;
+      o._dead=0;
+      if(v.readyState<2){              // 재생 시작조차 못 한 채 머무는 중
+        o._cold=(o._cold||0)+1;
+        if(o._cold>=8) score=o._cold;
+      } else {
+        o._cold=0;
+        if(o._lastT===v.currentTime){  // 재생 중인데 시간이 안 흐른다
+          o._stuck=(o._stuck||0)+1;
+          if(o._stuck>=3) score=o._stuck*3;  // 약 6초간 진행 없음 — 더 급한 증상
+        } else o._stuck=0;
+        o._lastT=v.currentTime;
+      }
     }
     /* 살아나지 못하는 화면을 2초마다 다시 붙이면 회선만 태우고 남은 화면까지 방해한다.
        실패가 이어질수록 간격을 벌린다(8초→최대 2분). 한 번 성공하면 다시 짧아진다. */
@@ -942,11 +950,12 @@ setInterval(()=>{
   });
   if(worst){
     const {o,i}=worst;
-    o._cold=0; o._stuck=0; o._lastTry=now; o._tries=(o._tries||0)+1;
+    o._cold=0; o._stuck=0; o._dead=0; o._lastTry=now; o._tries=(o._tries||0)+1;
     onStall();                         // 버퍼도 함께 늘린다(4초 내 중복은 무시됨)
     reloadOne(i, o.cell?.querySelector('.rf'));
   }
-},2000);
+}
+setInterval(healTick, 2000);
 
 /* ─────────── 세로 탭 (원본 재현) ─────────── */
 function vtabText(el,txt){ el.innerHTML=txt.split('').map(ch=>`<span>${ch===' '?'&nbsp;':ch}</span>`).join(''); }
