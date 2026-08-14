@@ -144,6 +144,12 @@ body.classic .item{border:1px solid #C8C8C8;border-width:0 0 1px 0}
 .item.on{background:var(--acc);color:#fff}
 .item .idx{font-family:var(--mono);font-size:11px;opacity:.6;flex:0 0 auto;width:22px}
 .item .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .star{flex:0 0 auto;width:32px;height:32px;display:grid;place-items:center;
+  font-size:16px;color:var(--dim);background:transparent;border-radius:6px}
+.item .star:hover{background:rgba(128,128,128,.2)}
+.item .star.on{color:#f0b429}
+.item.on .star{color:rgba(255,255,255,.7)}
+.item.on .star.on{color:#ffd75e}
 /* 세로 접기 탭 — 원본의 ┃고┃속┃도┃로┃ 재현 */
 .vtab{width:26px;background:var(--panel);border-left:1px solid var(--line);
       border-right:1px solid var(--line);display:flex;flex-direction:column;
@@ -322,10 +328,14 @@ const LS={get:(k,d)=>{try{return JSON.parse(localStorage.getItem('cv_'+k))??d}ca
           set:(k,v)=>{try{localStorage.setItem('cv_'+k,JSON.stringify(v))}catch(_){}},
           del:k=>{try{localStorage.removeItem('cv_'+k)}catch(_){}}};
 
+/* 즐겨찾기 초기값 — 구간의 주요 지점 몇 개만. 나머지는 ★ 로 직접 추가한다.
+   전부를 즐겨찾기로 두면 'CCTV 목록'과 구분이 사라진다. */
+const DEFAULT_FAVS = CAMS.filter(c=>/북천안|천안분기점|목천|옥산|청주$|남이분기점/.test(c.n))
+                         .map(c=>c.n);
 const S={
   open:[],                                  // 재생 중인 카메라 [{cam,hls,cell}]
-  active:0, skin:LS.get('skin','modern'), mode:LS.get('mode','live'),
-  favs:LS.get('favs',CAMS.map(c=>c.n)),     // 기본은 전체를 즐겨찾기로
+  active:0, skin:LS.get('skin','reimagined'), mode:LS.get('mode','live'),
+  favs:LS.get('favs', DEFAULT_FAVS.length?DEFAULT_FAVS:CAMS.slice(0,5).map(c=>c.n)),
   fit:LS.get('fit',false), low:LS.get('low',false), save:LS.get('save',true),
   sideOpen:true, colFav:true, colCam:true
 };
@@ -335,12 +345,14 @@ const MAX=20;
    지연을 줄이는 유일한 방법은 버퍼를 얇게 두는 것인데, 너무 얇으면 끊긴다.
    그래서 고정값을 쓰지 않고 '끊기지 않는 최소 버퍼'를 실시간으로 찾아간다.
    무사고 구간이 이어지면 조금씩 줄이고, 한 번이라도 끊기면 즉시 늘린다. */
+/* 올릴 땐 조금만, 내릴 땐 자주 — 한 번 끊겼다고 계속 뒤처진 채로 두지 않는다.
+   heal 은 '무사고 몇 초가 지나면 줄일지'. */
 const MODES={
-  live:{start:1.8, min:1.2, max:6.0, down:0.35, up:1.0, rate:1.45},
-  bal :{start:3.0, min:2.0, max:9.0, down:0.25, up:1.2, rate:1.25},
-  safe:{start:6.0, min:4.0, max:14 , down:0.15, up:1.5, rate:1.1}
+  live:{start:1.6, min:1.0, max:4.5, down:0.4, up:0.6, heal:10, rate:1.5},
+  bal :{start:3.0, min:2.0, max:7.0, down:0.4, up:0.8, heal:14, rate:1.3},
+  safe:{start:6.0, min:4.0, max:12 , down:0.3, up:1.0, heal:20, rate:1.15}
 };
-const Tune={cur:MODES.live.start, stalls:0, sinceStall:0, lastAdj:0};
+const Tune={cur:MODES.live.start, stalls:0, sinceStall:0, seeks:0};
 
 function modeCfg(){ return MODES[S.mode]||MODES.live; }
 function hlsConfig(){
@@ -348,10 +360,12 @@ function hlsConfig(){
   return {
     lowLatencyMode:true, enableWorker:true,
     liveSyncDuration:Tune.cur,
-    liveMaxLatencyDuration:Math.max(Tune.cur*3, m.max*2),
+    /* 이 값을 넘게 뒤처지면 hls.js 가 스스로 라이브 엣지로 복귀한다.
+       크게 잡으면 한번 밀린 뒤 영영 따라잡지 못하므로 타이트하게 둔다. */
+    liveMaxLatencyDuration:Tune.cur+2.5,
     maxLiveSyncPlaybackRate:m.rate,
-    backBufferLength:Math.max(10,Tune.cur*4),
-    maxBufferLength:Math.max(10,Tune.cur*4),
+    backBufferLength:Math.max(8,Tune.cur*3),
+    maxBufferLength:Math.max(8,Tune.cur*3),
     manifestLoadingTimeOut:8000, levelLoadingTimeOut:8000, fragLoadingTimeOut:12000,
     ...(S.low?{capLevelToPlayerSize:true, maxBufferSize:8*1000*1000}:{})
   };
@@ -360,7 +374,7 @@ function hlsConfig(){
 function applyTune(){
   S.open.forEach(o=>{ if(o.hls){
     o.hls.config.liveSyncDuration=Tune.cur;
-    o.hls.config.liveMaxLatencyDuration=Math.max(Tune.cur*3, modeCfg().max*2);
+    o.hls.config.liveMaxLatencyDuration=Tune.cur+2.5;
   }});
   LS.set('tune',Tune.cur);
 }
@@ -372,16 +386,45 @@ function onStall(){
     applyTune();
   }
 }
-setInterval(()=>{                       // 5초마다 평가
+setInterval(()=>{
   if(!S.open.length) return;
   const m=modeCfg();
   Tune.sinceStall+=5;
-  // 20초 무사고면 조금 줄여 라이브에 더 붙는다
-  if(Tune.sinceStall>=20 && Tune.cur>m.min){
+  if(Tune.sinceStall>=m.heal && Tune.cur>m.min){
     Tune.cur=Math.max(m.min, +(Tune.cur-m.down).toFixed(2));
     Tune.sinceStall=0; applyTune();
   }
 },5000);
+
+/* 라이브 엣지 복귀 감시 ─ 이 앱의 핵심.
+   버퍼링·탭 전환·네트워크 지터로 재생 위치가 한번 밀리면 스스로는 안 돌아온다.
+   목표보다 크게 뒤처졌으면 엣지 근처로 직접 당겨서 '라이브에 가깝게'를 유지한다. */
+function edgeOf(hls){
+  const d=hls?.levels?.[hls.currentLevel]?.details;
+  if(!d) return null;
+  return d.edge ?? (d.fragments?.length
+    ? d.fragments[d.fragments.length-1].start+d.fragments[d.fragments.length-1].duration : null);
+}
+setInterval(()=>{
+  S.open.forEach(o=>{
+    if(!o.hls) return;
+    const v=o.cell?.querySelector('video');
+    if(!v || v.paused || v.readyState<2 || v.seeking) return;
+    const edge=edgeOf(o.hls);
+    if(edge==null || !isFinite(edge) || v.currentTime<=0) return;
+    const behind=edge-v.currentTime;
+    // 목표 + 2초 이상 뒤처지면 당긴다. 조각 하나만큼은 남겨 두어 바로 끊기지 않게.
+    if(behind > Tune.cur+2){
+      const target=Math.max(0, edge-Math.max(1.0, Tune.cur*0.8));
+      try{
+        const buf=v.buffered;
+        let ok=false;
+        for(let i=0;i<buf.length;i++) if(target>=buf.start(i)&&target<=buf.end(i)) ok=true;
+        if(ok){ v.currentTime=target; Tune.seeks++; }
+      }catch(_){}
+    }
+  });
+},3000);
 
 /* ─────────── 레이아웃 (기존 프로그램 규칙 그대로) ───────────
    디컴파일로 확인: 8=4x2, 9=3x3, 10=3/3/4, 12=4x3, 16=4x4, 20=5x4
@@ -400,31 +443,47 @@ function rowsFor(n){
   return out;
 }
 
+function makeCell(o){
+  const cell=document.createElement('div');
+  cell.className='cell';
+  cell.innerHTML=`<video playsinline muted autoplay></video>
+    <div class="ttl"></div>
+    <button class="rf" data-reload="0" title="이 화면만 다시 연결">↻</button>
+    <button class="x" data-close="0">✕</button>
+    <div class="ov">연결 중…</div>`;
+  return cell;
+}
+function touchCell(cell,o,idx){
+  cell.dataset.i=idx;
+  cell.querySelector('.ttl').textContent=`${idx+1}번 : ${o.cam.n}`;
+  cell.querySelector('[data-close]').dataset.close=idx;
+  cell.querySelector('[data-reload]').dataset.reload=idx;
+  cell.classList.toggle('sel', idx===S.active);
+  cell.classList.toggle('fit', !S.fit);
+}
+/* 재배치할 때 기존 화면을 절대 다시 만들지 않는다.
+   innerHTML 로 갈아엎으면 video 가 파괴되어 재생 중인 화면이 전부 끊긴다.
+   셀을 분리했다가 새 행에 다시 붙이면 요소가 살아 있어 재생이 유지된다. */
 function render(){
-  const g=$('#grid'); g.innerHTML='';
+  const g=$('#grid');
   $('#empty').classList.toggle('hide', S.open.length>0);
-  const rows=rowsFor(S.open.length);
+  const fresh=[];
+  S.open.forEach(o=>{
+    if(!o.cell){ o.cell=makeCell(o); fresh.push(o); }
+    else o.cell.remove();                 // 부모에서만 분리 — 요소는 그대로 살아 있다
+  });
+  g.textContent='';                       // 남은 빈 행 컨테이너 제거
   let idx=0;
-  rows.forEach(cnt=>{
+  rowsFor(S.open.length).forEach(cnt=>{
     const r=document.createElement('div'); r.className='gridrow';
-    for(let i=0;i<cnt;i++){
+    for(let i=0;i<cnt && idx<S.open.length;i++,idx++){
       const o=S.open[idx];
-      const cell=document.createElement('div');
-      cell.className='cell'+(idx===S.active?' sel':'')+(S.fit?'':' fit');
-      cell.dataset.i=idx;
-      cell.innerHTML=`<video playsinline muted autoplay></video>
-        <div class="ttl">${idx+1}번 : ${o.cam.n}</div>
-        <button class="rf" data-reload="${idx}" title="이 화면만 다시 연결">↻</button>
-        <button class="x" data-close="${idx}">✕</button>
-        <div class="ov">연결 중…</div>`;
-      r.appendChild(cell);
-      o.cell=cell;
-      idx++;
+      touchCell(o.cell,o,idx);
+      r.appendChild(o.cell);
     }
     g.appendChild(r);
   });
-  // video 요소가 새로 만들어졌으므로 다시 붙인다
-  S.open.forEach(o=>bind(o));
+  fresh.forEach(o=>bind(o));              // 새로 만든 화면만 연결한다
   renderLists();
 }
 
@@ -462,6 +521,7 @@ function openCam(cam){
 function closeCam(i){
   const o=S.open[i]; if(!o) return;
   if(o.hls){ try{o.hls.destroy();}catch(_){} }
+  if(o.cell) o.cell.remove();          // 닫힌 화면만 DOM 에서 뺀다
   S.open.splice(i,1);
   if(S.active>=S.open.length) S.active=Math.max(0,S.open.length-1);
   render();
@@ -471,33 +531,51 @@ function closeAll(){ while(S.open.length) closeCam(0); }
 
 /* ─────────── 목록 ─────────── */
 const isOpen=n=>S.open.some(o=>o.cam.n===n);
+const isFav=n=>S.favs.includes(n);
+const row=(c,i)=>`<div class="item${isOpen(c.n)?' on':''}" data-n="${i}">
+    <span class="idx">${String(i+1).padStart(2,'0')}</span>
+    <span class="nm">${c.n}</span>
+    <button class="star${isFav(c.n)?' on':''}" data-fav="${i}"
+            title="${isFav(c.n)?'즐겨찾기에서 빼기':'즐겨찾기에 넣기'}">${isFav(c.n)?'★':'☆'}</button>
+  </div>`;
 function renderLists(){
-  const favs=CAMS.filter(c=>S.favs.includes(c.n));
-  $('#favList').innerHTML=favs.map(c=>{
-    const i=CAMS.indexOf(c);
-    return `<div class="item${isOpen(c.n)?' on':''}" data-n="${i}">
-      <span class="idx">${String(i+1).padStart(2,'0')}</span>
-      <span class="nm">${c.n}</span></div>`;}).join('');
-  $('#camList').innerHTML=CAMS.map((c,i)=>
-    `<div class="item${isOpen(c.n)?' on':''}" data-n="${i}">
-      <span class="idx">${String(i+1).padStart(2,'0')}</span>
-      <span class="nm">${c.n}</span></div>`).join('');
+  const favs=CAMS.filter(c=>isFav(c.n));
+  $('#favList').innerHTML = favs.length
+    ? favs.map(c=>row(c,CAMS.indexOf(c))).join('')
+    : `<div style="padding:18px 14px;font-size:13px;line-height:1.7;color:var(--dim)">
+         즐겨찾기가 비어 있습니다.<br>아래 <b>CCTV 목록</b>에서 ☆ 를 눌러 추가하세요.</div>`;
+  $('#camList').innerHTML=CAMS.map((c,i)=>row(c,i)).join('');
   renderStrip();
+}
+function toggleFav(i){
+  const c=CAMS[i]; if(!c) return;
+  const k=S.favs.indexOf(c.n);
+  if(k>=0) S.favs.splice(k,1); else S.favs.push(c.n);
+  LS.set('favs',S.favs);
+  renderLists();
 }
 /* 재해석 스킨의 하단 카메라 스트립 */
 function renderStrip(){
   if(S.skin!=='reimagined'){ $('#strip').innerHTML=''; return; }
-  $('#strip').innerHTML=CAMS.map((c,i)=>
-    `<div class="scard${isOpen(c.n)?' on':''}" data-n="${i}">
-       <span class="dot"></span>${c.n}</div>`).join('');
+  // 즐겨찾기를 앞으로 (정렬은 안정적이라 나머지 순서는 그대로 유지된다)
+  const order=CAMS.map((c,i)=>({c,i}))
+    .sort((a,b)=>(isFav(b.c.n)?1:0)-(isFav(a.c.n)?1:0));
+  $('#strip').innerHTML=order.map(({c,i})=>
+    `<div class="scard${isOpen(c.n)?' on':''}${isFav(c.n)?' fav':''}" data-n="${i}">
+       <span class="dot"></span>${isFav(c.n)?'★ ':''}${c.n}</div>`).join('');
   if(window.__stripSync) setTimeout(window.__stripSync,50);
 }
 $('#strip').onclick=e=>{const s=e.target.closest('.scard'); if(s) pick(+s.dataset.n);};
 
 function pick(i){ const c=CAMS[i]; if(!c) return;
   if(isOpen(c.n)){ closeCam(S.open.findIndex(o=>o.cam.n===c.n)); } else openCam(c); }
-$('#favList').onclick=e=>{const it=e.target.closest('.item'); if(it) pick(+it.dataset.n);};
-$('#camList').onclick=e=>{const it=e.target.closest('.item'); if(it) pick(+it.dataset.n);};
+function listClick(e){
+  const st=e.target.closest('[data-fav]');
+  if(st){ e.stopPropagation(); toggleFav(+st.dataset.fav); return; }
+  const it=e.target.closest('.item'); if(it) pick(+it.dataset.n);
+}
+$('#favList').onclick=listClick;
+$('#camList').onclick=listClick;
 $('#grid').onclick=e=>{
   const x=e.target.closest('[data-close]');
   if(x){ e.stopPropagation(); closeCam(+x.dataset.close); return; }
@@ -645,17 +723,15 @@ $('#bFavAll').onclick=()=>{
 function updateDiag(){
   if(!$('#sheet').classList.contains('on')) return;
   $('#diag').innerHTML=`현재 버퍼 <b>${Tune.cur.toFixed(1)}초</b> · 재생 ${S.open.length}대`+
-    (Tune.stalls?` · 누적 보정 ${Tune.stalls}회`:'');
+    (Tune.stalls?` · 버퍼 보정 ${Tune.stalls}회`:'')+
+    (Tune.seeks?` · 라이브 복귀 ${Tune.seeks}회`:'');
 }
 setInterval(()=>{
   const o=S.open[S.active], el=$('#live');
   let d=null;
   try{
     if(o?.hls){
-      const det=o.hls.levels?.[o.hls.currentLevel]?.details;
-      const v=o.cell?.querySelector('video');
-      const edge=det?.edge ?? (det?.fragments?.length
-        ? det.fragments[det.fragments.length-1].start+det.fragments[det.fragments.length-1].duration:null);
+      const edge=edgeOf(o.hls), v=o.cell?.querySelector('video');
       if(edge!=null&&v&&v.currentTime>0) d=edge-v.currentTime;
     }
   }catch(_){}
