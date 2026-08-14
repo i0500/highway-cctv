@@ -578,11 +578,13 @@ const MAX=20;
 /* 올릴 땐 조금만, 내릴 땐 자주 — 한 번 끊겼다고 계속 뒤처진 채로 두지 않는다.
    heal 은 '무사고 몇 초가 지나면 줄일지'. */
 /* 회선 여유를 실측해 '끊기지 않는 최소 버퍼'를 계속 추적한다.
-   live 는 단발성 끊김에 반응하지 않고 반복될 때만 아주 조금 올린다. */
+   live 는 단발성 끊김에 반응하지 않고 반복될 때만 아주 조금 올린다.
+   rate 는 뒤처졌을 때 따라잡는 재생 속도다. 화면이 튀지 않아 seek 보다 낫지만,
+   교통 상황을 보는 화면이라 1.5배는 차 속도가 눈에 띄게 왜곡된다 — 티 안 나게 낮춰 잡는다. */
 const MODES={
-  live:{start:1.6, min:1.0, max:3.2, down:0.5, up:0.4, heal:8,  rate:1.5, multi:0.15},
-  bal :{start:3.0, min:2.0, max:7.0, down:0.4, up:0.8, heal:14, rate:1.3, multi:0.25},
-  safe:{start:6.0, min:4.0, max:12 , down:0.3, up:1.0, heal:20, rate:1.15,multi:0.35}
+  live:{start:1.6, min:1.0, max:3.2, down:0.5, up:0.4, heal:8,  rate:1.2, multi:0.15},
+  bal :{start:3.0, min:2.0, max:7.0, down:0.4, up:0.8, heal:14, rate:1.15,multi:0.25},
+  safe:{start:6.0, min:4.0, max:12 , down:0.3, up:1.0, heal:20, rate:1.1, multi:0.35}
 };
 if(!MODES[S.mode]) S.mode='live';       // 없어진 모드가 저장돼 있으면 되돌린다
 const Tune={cur:MODES.live.start, stalls:0, sinceStall:0, seeks:0,
@@ -1591,9 +1593,12 @@ setInterval(()=>{
       if(e!=null && isFinite(e) && xv && xv.currentTime>0) lag=e-xv.currentTime; }catch(_){}
     /* 받는 시간(ms)은 회선 상태, 배속(x)은 카메라가 실시간만큼 보내주는지를 뜻한다.
        카메라가 느리면 회선이 멀쩡해도 끊기므로 둘을 같이 보여야 구분이 된다. */
+    /* 배속은 카메라가 실시간만큼 못 보낼 때만 띄운다.
+       정상(1.00x)일 때는 알려 줄 것이 없고, 재는 창이 30초라 1.2x 처럼
+       잠깐 넘치는 값이 뜨는데 그것도 알릴 내용이 아니다. */
     b.textContent = (x.lastMs!=null ? x.lastMs+'ms' : '—')
                   + (lag!=null && isFinite(lag) ? ' · '+lag.toFixed(1)+'초' : '')
-                  + (x._rate!=null ? ' · '+x._rate.toFixed(2)+'x' : '');
+                  + (x._rate!=null && x._rate<0.9 ? ' · '+x._rate.toFixed(2)+'x' : '');
   });
   updateDiag();
 },500);
