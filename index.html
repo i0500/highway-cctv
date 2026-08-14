@@ -649,7 +649,11 @@ setInterval(()=>{
   // 전부 동시에 seek 하면 다 같이 버퍼를 비워 화면이 한꺼번에 멈춘다.
   let worst=null, worstBehind=limit;
   S.open.forEach(o=>{
-    if(!o.hls || o.slow) return;       // 소스가 느린 화면은 당길수록 버퍼만 마른다
+    /* 느린 소스야말로 당겨줘야 한다.
+       6초에 2초치만 오는 화면을 그냥 두면 재생 위치가 계속 뒤로 밀려
+       한참 지난 장면을 보게 된다. 끊기더라도 최신을 보여주는 편이 감시에 맞다
+       (사용자가 새로고침을 누를 때 실제로 일어나는 일이 이것이다). */
+    if(!o.hls) return;
     const v=o.cell?.querySelector('video');
     if(!v || v.paused || v.readyState<2 || v.seeking) return;
     const edge=edgeOf(o.hls);
