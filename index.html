@@ -40,6 +40,9 @@ body.reimagined #main{position:relative}
 body.reimagined #side{position:absolute;left:0;top:0;bottom:0;z-index:60;
   background:rgba(10,11,14,.94);backdrop-filter:blur(14px);border-right:1px solid var(--line2)}
 body.reimagined #side.closed{display:none}
+/* 목록이 열려 있을 때 뒤를 덮는 면 — 눌러서 닫는다 */
+#sideBackdrop{display:none;position:absolute;inset:0;z-index:55;background:rgba(0,0,0,.45)}
+#sideBackdrop.on{display:block}
 body.reimagined .vtab{display:none}
 body.reimagined #top{position:absolute;left:0;right:0;top:var(--st);z-index:40;
   background:linear-gradient(rgba(0,0,0,.72),transparent);border:none;padding:10px 12px 22px}
@@ -59,12 +62,21 @@ body.reimagined .cell .ttl{top:auto;bottom:0;padding:20px 10px 8px;font-size:12.
 body.reimagined .cell .x{top:auto;bottom:6px;right:6px;width:26px;height:26px;
   background:rgba(0,0,0,.5);border-radius:50%;color:#fff}
 body.reimagined .cell.sel{outline:2px solid var(--acc);outline-offset:-2px}
-/* 하단 카메라 스트립 */
-#strip{display:none;flex:0 0 auto;gap:8px;padding:9px 10px calc(9px + var(--sb));
-  overflow-x:auto;background:rgba(8,9,11,.96);border-top:1px solid var(--line2);
-  scrollbar-width:none}
+/* 하단 카메라 스트립 — 터치는 스와이프, PC 는 휠·드래그·화살표 */
+#striprow{display:none;position:relative;flex:0 0 auto;background:rgba(8,9,11,.96);
+  border-top:1px solid var(--line2)}
+body.reimagined #striprow{display:block}
+#strip{display:flex;gap:8px;padding:9px 44px calc(9px + var(--sb));
+  overflow-x:auto;scrollbar-width:none;scroll-behavior:smooth;cursor:grab}
+#strip.drag{cursor:grabbing;scroll-behavior:auto}
 #strip::-webkit-scrollbar{display:none}
-body.reimagined #strip{display:flex}
+.snav{position:absolute;top:0;bottom:0;width:38px;display:grid;place-items:center;
+  background:linear-gradient(90deg,rgba(8,9,11,.98),rgba(8,9,11,0));
+  color:#fff;font-size:19px;z-index:5;opacity:.85}
+.snav:hover{opacity:1;background:linear-gradient(90deg,rgba(8,9,11,1),rgba(8,9,11,.4))}
+.snav.r{right:0;background:linear-gradient(270deg,rgba(8,9,11,.98),rgba(8,9,11,0))}
+.snav.r:hover{background:linear-gradient(270deg,rgba(8,9,11,1),rgba(8,9,11,.4))}
+.snav.off{opacity:.2;pointer-events:none}
 .scard{flex:0 0 auto;min-width:96px;max-width:150px;padding:9px 12px;border-radius:12px;
   background:var(--panel2);border:1px solid var(--line2);font-size:12.5px;cursor:pointer;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:44px;
@@ -156,6 +168,14 @@ body.modern .cell .ttl{background:linear-gradient(rgba(0,0,0,.75),transparent);b
 .cell .x{position:absolute;top:2px;right:3px;width:22px;height:20px;display:grid;place-items:center;
   font-size:13px;color:var(--dim);background:transparent}
 .cell .x:hover{color:#c0392b}
+.cell .rf{position:absolute;top:2px;right:26px;width:22px;height:20px;display:grid;place-items:center;
+  font-size:13px;color:var(--dim);background:transparent}
+.cell .rf:hover{color:var(--acc)}
+.cell .rf.spin{animation:rot .8s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.cell .rf.spin{animation:none}}
+body.reimagined .cell .rf{top:auto;bottom:6px;right:38px;width:26px;height:26px;
+  background:rgba(0,0,0,.5);border-radius:50%;color:#fff}
 .cell.sel{outline:2px solid var(--acc);outline-offset:-2px}
 .cell .ov{position:absolute;inset:0;display:grid;place-items:center;background:rgba(0,0,0,.55);
   color:#ccc;font-size:12px;text-align:center;padding:8px}
@@ -224,9 +244,11 @@ body.classic .sheet-in{border:2px solid #888}
   </div>
 
   <div id="main">
+    <div id="sideBackdrop"></div>
     <div id="side">
       <div class="col" id="colFav">
         <div class="colhead">
+          <button id="bCloseSide" style="display:none">✕ 목록 닫기</button>
           <button id="bSetting2">설정</button>
           <button id="bFavAll">즐겨찾기 전체 열기</button>
         </div>
@@ -245,7 +267,11 @@ body.classic .sheet-in{border:2px solid #888}
     </div>
   </div>
 
-  <div id="strip"></div>
+  <div id="striprow">
+    <button class="snav" id="sLeft" aria-label="왼쪽으로">‹</button>
+    <div id="strip"></div>
+    <button class="snav r" id="sRight" aria-label="오른쪽으로">›</button>
+  </div>
 </div>
 
 <!-- 설정 -->
@@ -388,6 +414,7 @@ function render(){
       cell.dataset.i=idx;
       cell.innerHTML=`<video playsinline muted autoplay></video>
         <div class="ttl">${idx+1}번 : ${o.cam.n}</div>
+        <button class="rf" data-reload="${idx}" title="이 화면만 다시 연결">↻</button>
         <button class="x" data-close="${idx}">✕</button>
         <div class="ov">연결 중…</div>`;
       r.appendChild(cell);
@@ -463,6 +490,7 @@ function renderStrip(){
   $('#strip').innerHTML=CAMS.map((c,i)=>
     `<div class="scard${isOpen(c.n)?' on':''}" data-n="${i}">
        <span class="dot"></span>${c.n}</div>`).join('');
+  if(window.__stripSync) setTimeout(window.__stripSync,50);
 }
 $('#strip').onclick=e=>{const s=e.target.closest('.scard'); if(s) pick(+s.dataset.n);};
 
@@ -473,9 +501,39 @@ $('#camList').onclick=e=>{const it=e.target.closest('.item'); if(it) pick(+it.da
 $('#grid').onclick=e=>{
   const x=e.target.closest('[data-close]');
   if(x){ e.stopPropagation(); closeCam(+x.dataset.close); return; }
+  const r=e.target.closest('[data-reload]');
+  if(r){ e.stopPropagation(); reloadOne(+r.dataset.reload, r); return; }
   const c=e.target.closest('.cell');
   if(c){ S.active=+c.dataset.i; $$('.cell').forEach(el=>el.classList.toggle('sel',el===c)); }
 };
+
+/* 한 화면만 다시 연결 — 전체를 끊지 않는다 */
+function reloadOne(i, btn){
+  const o=S.open[i]; if(!o) return;
+  if(btn){ btn.classList.add('spin'); setTimeout(()=>btn.classList.remove('spin'),1200); }
+  const ov=o.cell?.querySelector('.ov');
+  if(ov){ ov.classList.remove('hide'); ov.textContent='다시 연결 중…'; }
+  o._stuck=0; o._lastT=-1;
+  bind(o);
+}
+
+/* 멈춤 자동 복구 — 재생 중인데 시간이 안 흐르면 그 화면만 조용히 다시 연결한다.
+   여러 대를 동시에 볼 때 한 대가 굳어버리는 상황을 사용자가 눈치채기 전에 되살린다. */
+setInterval(()=>{
+  S.open.forEach((o,i)=>{
+    const v=o.cell?.querySelector('video');
+    if(!v || v.paused || v.readyState<2) return;
+    if(o._lastT===v.currentTime){
+      o._stuck=(o._stuck||0)+1;
+      if(o._stuck>=3){          // 약 6초간 진행 없음
+        o._stuck=0;
+        onStall();              // 버퍼도 함께 늘린다
+        reloadOne(i, o.cell?.querySelector('.rf'));
+      }
+    } else o._stuck=0;
+    o._lastT=v.currentTime;
+  });
+},2000);
 
 /* ─────────── 세로 탭 (원본 재현) ─────────── */
 function vtabText(el,txt){ el.innerHTML=txt.split('').map(ch=>`<span>${ch===' '?'&nbsp;':ch}</span>`).join(''); }
@@ -483,7 +541,57 @@ vtabText($('#tabFav'),'즐겨찾기 목록');
 vtabText($('#tabCam'),'CCTV 목록');
 $('#tabFav').onclick=()=>{S.colFav=!S.colFav;$('#colFav').classList.toggle('hide',!S.colFav);};
 $('#tabCam').onclick=()=>{S.colCam=!S.colCam;$('#colCam').classList.toggle('hide',!S.colCam);};
-$('#bSide').onclick=()=>{S.sideOpen=!S.sideOpen;$('#side').classList.toggle('closed',!S.sideOpen);};
+
+/* 목록 열고 닫기 — 겹쳐 뜨는 상황(재해석·모바일)에서는
+   ☰ 가 가려지므로 닫기 버튼·배경 클릭·ESC 를 모두 받아준다. */
+function setSide(open){
+  S.sideOpen=open;
+  $('#side').classList.toggle('closed',!open);
+  const overlay = S.skin==='reimagined' || window.innerWidth<=760;
+  $('#sideBackdrop').classList.toggle('on', open && overlay);
+  $('#bCloseSide').style.display = overlay ? '' : 'none';
+}
+$('#bSide').onclick=()=>setSide(!S.sideOpen);
+$('#bCloseSide').onclick=()=>setSide(false);
+$('#sideBackdrop').onclick=()=>setSide(false);
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape') return;
+  if($('#sheet').classList.contains('on')) $('#sheet').classList.remove('on');
+  else if(S.sideOpen) setSide(false);
+});
+
+/* 하단 스트립 — 휠·드래그·화살표로 좌우 이동 */
+(function stripNav(){
+  const st=$('#strip');
+  st.addEventListener('wheel',e=>{
+    if(!e.deltaY || e.shiftKey) return;
+    e.preventDefault(); st.scrollLeft += e.deltaY;
+  },{passive:false});
+  let down=false,x0=0,l0=0,moved=0;
+  st.addEventListener('pointerdown',e=>{
+    down=true;moved=0;x0=e.clientX;l0=st.scrollLeft;st.classList.add('drag');
+  });
+  st.addEventListener('pointermove',e=>{
+    if(!down) return;
+    const d=e.clientX-x0; moved=Math.max(moved,Math.abs(d));
+    st.scrollLeft=l0-d;
+  });
+  const up=()=>{ down=false; st.classList.remove('drag'); };
+  st.addEventListener('pointerup',up); st.addEventListener('pointerleave',up);
+  // 끌어서 이동한 뒤에는 클릭으로 오인하지 않게 막는다
+  st.addEventListener('click',e=>{ if(moved>6){ e.stopPropagation(); e.preventDefault(); } },true);
+  // CSS 의 scroll-behavior:smooth 가 부드럽게 처리하므로 값만 바꾼다
+  const page=()=>Math.max(160,st.clientWidth*0.8);
+  $('#sLeft').onclick=()=>{ st.scrollLeft-=page(); };
+  $('#sRight').onclick=()=>{ st.scrollLeft+=page(); };
+  const sync=()=>{
+    $('#sLeft').classList.toggle('off', st.scrollLeft<=2);
+    $('#sRight').classList.toggle('off', st.scrollLeft>=st.scrollWidth-st.clientWidth-2);
+  };
+  st.addEventListener('scroll',sync); window.addEventListener('resize',sync);
+  setTimeout(sync,300);
+  window.__stripSync=sync;
+})();
 
 /* ─────────── 스킨 ─────────── */
 const SKINS=['classic','modern','reimagined'];
@@ -496,8 +604,7 @@ function applySkin(){
   $$('#segSkin button').forEach(b=>b.classList.toggle('on',b.dataset.s===S.skin));
   document.querySelector('meta[name=theme-color]').content=SKIN_BG[S.skin];
   // 재해석은 사이드 목록을 기본으로 닫고 하단 스트립을 쓴다
-  if(S.skin==='reimagined'){ S.sideOpen=false; $('#side').classList.add('closed'); }
-  else { $('#side').classList.remove('closed'); S.sideOpen=true; }
+  setSide(S.skin!=='reimagined' && window.innerWidth>760);
   LS.set('skin',S.skin);
   renderStrip();
 }
