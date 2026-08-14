@@ -220,14 +220,47 @@ body.classic .sheet-in{border:2px solid #888}
   background:var(--panel2);font-size:13px;min-height:42px}
 .seg button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
 
-/* 모바일 */
+/* 좁은 화면 전용 목록 탭 (넓은 화면에서는 세로 탭을 쓰므로 숨김) */
+#listTabs{display:none}
+#listTabs button{flex:1;padding:12px 6px;font-size:14px;background:var(--panel2);
+  border:0;border-bottom:2px solid transparent;color:var(--dim);min-height:46px}
+#listTabs button.on{color:var(--fg);border-bottom-color:var(--acc);font-weight:700;
+  background:var(--panel)}
+#listTabs button.close{flex:0 0 52px;font-size:17px}
+
+/* ══════════════ 좁은 화면 ══════════════ */
 @media(max-width:760px){
-  #main{flex-direction:column}
-  #side{position:absolute;left:0;top:0;bottom:0;z-index:50;border-right:1px solid var(--line2);
-        box-shadow:4px 0 16px rgba(0,0,0,.3)}
+  #main{position:relative}
+  /* 목록은 화면을 거의 다 쓰는 오버레이로 — 좁은 칸에 두 목록을 욱여넣지 않는다 */
+  #side{position:absolute;left:0;top:0;bottom:0;width:min(92vw,420px);z-index:60;
+        flex-direction:column;border-right:1px solid var(--line2);
+        box-shadow:6px 0 22px rgba(0,0,0,.45)}
   #side.closed{display:none}
+  #sideBackdrop{z-index:55}
+  #listTabs{display:flex}
+  .vtab{display:none}                     /* 세로 접기 탭은 좁은 화면에서 무의미 */
+  .col{width:100%;flex:1 1 auto;min-height:0}
+  .col.hide{display:none}
+  .colhead{flex-direction:row;flex-wrap:wrap}
+  .colhead button{flex:1 1 40%}
+  .item{min-height:50px;font-size:15px}
+  .item .star{width:44px;height:44px;font-size:19px}   /* 손가락으로 누를 수 있게 */
   #stage{flex:1 1 auto}
-  .col{width:min(72vw,240px)}
+
+  /* 화면이 여러 개면 칸이 작아져 버튼끼리 겹친다.
+     선택한 칸에만 버튼을 보여주고, 나머지는 닫기만 남긴다. */
+  #grid.dense .cell .zm,
+  #grid.dense .cell .rf{display:none}
+  #grid.dense .cell.sel .zm,
+  #grid.dense .cell.sel .rf{display:grid}
+  #grid.dense .cell .ttl{font-size:10.5px;padding:2px 5px}
+  #grid.dense .cell .x{width:26px;height:24px}
+  body.reimagined #grid.dense .cell .x{bottom:4px;right:4px;width:24px;height:24px}
+  body.reimagined #grid.dense .cell.sel .rf{bottom:4px;right:32px;width:24px;height:24px}
+  body.reimagined #grid.dense .cell.sel .zm{bottom:4px;right:60px;width:24px;height:24px}
+  /* 확대 중에는 칸이 하나뿐이므로 버튼을 모두 되살린다 */
+  #grid.dense.zoomed .cell.zoom .zm,
+  #grid.dense.zoomed .cell.zoom .rf{display:grid}
 }
 </style>
 </head>
@@ -263,6 +296,12 @@ body.classic .sheet-in{border:2px solid #888}
   <div id="main">
     <div id="sideBackdrop"></div>
     <div id="side">
+      <!-- 좁은 화면에서는 두 목록을 나란히 못 두므로 탭으로 하나씩 보여준다 -->
+      <div id="listTabs">
+        <button data-col="fav" class="on">즐겨찾기</button>
+        <button data-col="cam">전체 목록</button>
+        <button id="bCloseSide2" class="close">✕</button>
+      </div>
       <div class="col" id="colFav">
         <div class="colhead">
           <button id="bCloseSide" style="display:none">✕ 목록 닫기</button>
@@ -606,6 +645,7 @@ function render(){
   });
   g.classList.toggle('zoomed', S.zoom>=0);
   $$('.gridrow').forEach(r=>r.classList.toggle('hasZoom', !!r.querySelector('.cell.zoom')));
+  syncDense();
   fresh.forEach(o=>bind(o));              // 새로 만든 화면만 연결한다
   renderLists();
 }
@@ -766,17 +806,37 @@ setInterval(()=>{
 function vtabText(el,txt){ el.innerHTML=txt.split('').map(ch=>`<span>${ch===' '?'&nbsp;':ch}</span>`).join(''); }
 vtabText($('#tabFav'),'즐겨찾기 목록');
 vtabText($('#tabCam'),'CCTV 목록');
+const narrow=()=>window.innerWidth<=760;
 $('#tabFav').onclick=()=>{S.colFav=!S.colFav;$('#colFav').classList.toggle('hide',!S.colFav);};
 $('#tabCam').onclick=()=>{S.colCam=!S.colCam;$('#colCam').classList.toggle('hide',!S.colCam);};
+
+/* 좁은 화면: 두 목록을 나란히 두면 각각이 너무 좁아 이름도 ★ 도 못 누른다.
+   탭으로 하나씩 전체 폭을 쓰게 한다. */
+function showCol(which){
+  S.listTab=which;
+  const nb=narrow();
+  $('#colFav').classList.toggle('hide', nb ? which!=='fav' : !S.colFav);
+  $('#colCam').classList.toggle('hide', nb ? which!=='cam' : !S.colCam);
+  $$('#listTabs button[data-col]').forEach(b=>b.classList.toggle('on',b.dataset.col===which));
+}
+$$('#listTabs button[data-col]').forEach(b=>b.onclick=()=>showCol(b.dataset.col));
+$('#bCloseSide2').onclick=()=>setSide(false);
+/* 칸이 많아 작아지면 버튼이 겹치므로 '빽빽함' 표시를 켜서 CSS 가 정리하게 한다 */
+function syncDense(){
+  $('#grid').classList.toggle('dense', narrow() && S.open.length>4);
+}
+window.addEventListener('resize',()=>{ showCol(S.listTab||'fav'); syncDense(); setSide(S.sideOpen); });
 
 /* 목록 열고 닫기 — 겹쳐 뜨는 상황(재해석·모바일)에서는
    ☰ 가 가려지므로 닫기 버튼·배경 클릭·ESC 를 모두 받아준다. */
 function setSide(open){
   S.sideOpen=open;
   $('#side').classList.toggle('closed',!open);
-  const overlay = S.skin==='reimagined' || window.innerWidth<=760;
+  const overlay = S.skin==='reimagined' || narrow();
   $('#sideBackdrop').classList.toggle('on', open && overlay);
-  $('#bCloseSide').style.display = overlay ? '' : 'none';
+  // 좁은 화면에는 탭 줄에 ✕ 가 있으므로 본문 버튼은 넓은 화면에서만 쓴다
+  $('#bCloseSide').style.display = (overlay && !narrow()) ? '' : 'none';
+  if(open) showCol(S.listTab||'fav');
 }
 $('#bSide').onclick=()=>setSide(!S.sideOpen);
 $('#bCloseSide').onclick=()=>setSide(false);
