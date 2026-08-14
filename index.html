@@ -256,33 +256,36 @@ body.classic .sheet-in{border:2px solid #888}
   #stage{overflow-y:auto;-webkit-overflow-scrolling:touch}
   #grid{height:auto;min-height:100%}
   .gridrow{flex:0 0 auto}
-  /* 화면 높이를 6등분하면 칸이 너무 납작해 영상이 이름에 다 가린다.
-     16:9 를 지키되 최소 높이를 확보하고, 넘치는 만큼은 아래로 스크롤한다. */
-  .cell{aspect-ratio:16/9;min-height:152px}
+  /* 영상은 16:9 라 4:3 칸에 담으면 아래가 남는다.
+     영상을 위로 붙여 그 남는 검은 자리에 조작줄을 넣는다 — 영상을 가리지 않는다. */
+  .cell{aspect-ratio:4/3}
+  .cell video{object-position:top}
   #grid.zoomed{height:100%}
-  #grid.zoomed .cell.zoom{aspect-ratio:auto;min-height:0;height:100%}
+  #grid.zoomed .cell.zoom{aspect-ratio:auto;height:100%}
+  #grid.zoomed .cell.zoom video{object-position:center}
 
-  /* 칸 아래쪽에 두 줄로 쌓는다 — 위가 이름, 그 아래가 버튼.
-     버튼을 칸 위로 올리면 바로 위 칸의 이름과 붙어 보여 어느 칸 것인지 헷갈린다. */
-  #grid .cell .ttl{top:auto;bottom:0;font-size:12px;font-weight:700;line-height:1.25;
-    padding:10px 8px 37px 8px;background:linear-gradient(transparent,rgba(0,0,0,.92));
-    border:none;color:#fff;text-shadow:0 1px 3px #000}
+  /* 영상 아래 검은 자리에 한 줄 — 버튼 셋, 그 다음 이름.
+     별도 영역을 만들지 않으므로 영상 크기는 그대로다. */
   #grid .cell .zm,
   #grid .cell .rf,
-  #grid .cell .x{display:grid;top:auto;bottom:5px;width:28px;height:28px;
-    background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.22);
+  #grid .cell .x{display:grid;top:auto;bottom:4px;right:auto;width:26px;height:26px;
+    background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.2);
     border-radius:7px;color:#fff;font-size:13px}
-  #grid .cell .zm{right:71px}
-  #grid .cell .rf{right:38px}
-  #grid .cell .x{right:5px}
+  #grid .cell .zm{left:5px}
+  #grid .cell .rf{left:35px}
+  #grid .cell .x{left:65px}
+  #grid .cell .ttl{top:auto;bottom:4px;left:96px;right:5px;height:26px;
+    display:flex;align-items:center;padding:0;background:none;border:none;
+    font-size:11.5px;font-weight:700;color:#e7edf4;text-shadow:none;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   /* 확대 중에는 여유가 있으니 크게 */
-  #grid.zoomed .cell.zoom .ttl{font-size:15px;padding:20px 11px 54px 11px}
   #grid.zoomed .cell.zoom .zm,
   #grid.zoomed .cell.zoom .rf,
-  #grid.zoomed .cell.zoom .x{width:40px;height:40px;font-size:17px;bottom:8px}
-  #grid.zoomed .cell.zoom .zm{right:100px}
-  #grid.zoomed .cell.zoom .rf{right:54px}
-  #grid.zoomed .cell.zoom .x{right:8px}
+  #grid.zoomed .cell.zoom .x{width:38px;height:38px;font-size:17px;bottom:8px}
+  #grid.zoomed .cell.zoom .zm{left:8px}
+  #grid.zoomed .cell.zoom .rf{left:52px}
+  #grid.zoomed .cell.zoom .x{left:96px}
+  #grid.zoomed .cell.zoom .ttl{left:142px;bottom:8px;height:38px;font-size:14px}
 }
 </style>
 </head>
