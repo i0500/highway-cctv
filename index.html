@@ -1106,7 +1106,13 @@ function render(){
   g.classList.toggle('zoomed', S.zoom>=0);
   $$('.gridrow').forEach(r=>r.classList.toggle('hasZoom', !!r.querySelector('.cell.zoom')));
   syncDense();
-  fresh.forEach(o=>bind(o));              // 새로 만든 화면만 연결한다
+  /* 여러 대를 한꺼번에 붙이면 시작하는 순간 디코더가 몰려, 먼저 붙은 화면이
+     프레임을 놓치고 그대로 뒤처진 채 회복하지 못한다(12대를 동시에 붙였을 때
+     앞의 네 대만 계속 끊겼다). 조금씩 시차를 두고 붙인다. */
+  fresh.forEach((o,k)=>{
+    if(fresh.length<=2) bind(o);
+    else setTimeout(()=>{ if(S.open.includes(o)) bind(o); }, k*180);
+  });
   /* 대수가 바뀌면 화면당 버퍼·메모리 몫이 달라진다 — 이미 열린 화면에도 반영한다 */
   applyTune();
   /* Safari/iOS 는 DOM 에서 분리된 <video> 를 정지시킨다.
