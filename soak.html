@@ -28,9 +28,12 @@ window.RESULT=RESULT; window.DONE=false;
 const $=s=>document.querySelector(s);
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
+/* 앱 파일이 브라우저 캐시에 남아 옛 판으로 재는 일이 있었다 —
+   잴 때마다 새로 받도록 주소에 표시를 붙인다 */
+const STAMP=String(Date.now());
 function mkFrame(sub,w,h){
   const f=document.createElement('iframe');
-  f.src='index.html'+(sub?'?sub=1&debug=0':'');
+  f.src='index.html?v='+STAMP+(sub?'&sub=1':'');
   f.style.width=w+'px'; f.style.height=h+'px';
   $('#frames').appendChild(f);
   return new Promise(r=>{ f.onload=()=>r(f); });
