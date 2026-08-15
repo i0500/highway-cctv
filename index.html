@@ -595,9 +595,9 @@ const MAX=20;
    rate 는 뒤처졌을 때 따라잡는 재생 속도다. 화면이 튀지 않아 seek 보다 낫지만,
    교통 상황을 보는 화면이라 1.5배는 차 속도가 눈에 띄게 왜곡된다 — 티 안 나게 낮춰 잡는다. */
 const MODES={
-  live:{start:1.6, min:1.0, max:3.2, down:0.5, up:0.4, heal:8,  rate:1.2, multi:0.15},
-  bal :{start:3.0, min:2.0, max:7.0, down:0.4, up:0.8, heal:14, rate:1.15,multi:0.25},
-  safe:{start:6.0, min:4.0, max:12 , down:0.3, up:1.0, heal:20, rate:1.1, multi:0.35}
+  live:{start:1.6, min:1.0, max:3.2, down:0.5, up:0.4, heal:8,  rate:1.2, multi:0.06},
+  bal :{start:3.0, min:2.0, max:7.0, down:0.4, up:0.8, heal:14, rate:1.15,multi:0.12},
+  safe:{start:6.0, min:4.0, max:12 , down:0.3, up:1.0, heal:20, rate:1.1, multi:0.2}
 };
 if(!MODES[S.mode]) S.mode='live';       // 없어진 모드가 저장돼 있으면 되돌린다
 const Tune={cur:MODES.live.start, stalls:0, sinceStall:0, seeks:0,
@@ -738,6 +738,11 @@ function onStall(e){
   }
   Tune.sinceStall=0;
   if(!m.up) return;                                  // 고정 모드는 올리지 않음
+  /* 버퍼가 아직 남아 있는데 끊겼다면 받아오는 속도가 모자란 것이 아니라
+     여러 화면을 한꺼번에 그리다 생긴 순간 정지다. 이때 버퍼를 키워 봐야
+     지연만 늘고 끊김은 그대로였다(20대 실측: 버퍼 1.8초 0회 / 4.8초 13회). */
+  const mb=minBuffer();
+  if(mb!=null && mb>1.2) return;
   Tune.recent=Tune.recent.filter(t=>now-t<12000);
   Tune.recent.push(now);
   if(Tune.recent.length<3) return;                   // 단발성은 무시
@@ -834,7 +839,9 @@ function edgeOf(hls){
 }
 setInterval(()=>{
   if(!S.open.length || dormant) return;
-  const limit=bufFor()+2;
+  /* 당길 때마다 1.5초 안에 끊김이 뒤따랐다(실측 22/22). 배속으로 따라잡을
+     여지를 주고, 그래도 안 되는 큰 밀림에만 손을 댄다. */
+  const limit=Math.max(6, bufFor()+3);
   // 뒤처진 화면 중 '가장 심한 하나'만 당긴다.
   // 전부 동시에 seek 하면 다 같이 버퍼를 비워 화면이 한꺼번에 멈춘다.
   let worst=null, worstBehind=limit;
@@ -1616,7 +1623,9 @@ setInterval(()=>{
   if(d==null||!isFinite(d)){ el.textContent='—'; el.className='live'; }
   else { el.textContent='라이브 -'+d.toFixed(1)+'초';
          el.className='live '+(d<2.5?'g':d<5?'y':'r'); }
-  /* 화면마다 조각 받는 데 걸린 시간과 현재 라이브 지연을 띄운다 */
+  /* 화면마다 조각 받는 데 걸린 시간과 현재 라이브 지연을 띄운다.
+     대수가 많으면 절반 주기로만 훑는다 — 숫자 몇 개 때문에 매번 20개를 볼 이유가 없다. */
+  if(S.open.length>8 && (Tune._tick=(Tune._tick||0)+1)%2) { updateDiag(); return; }
   S.open.forEach(x=>{
     const b=x.cell?.querySelector('.bdg'); if(!b) return;
     const xv=x.cell.querySelector('video');
