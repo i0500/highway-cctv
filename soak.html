@@ -6,7 +6,7 @@
  body{margin:0;font:12px/1.5 system-ui;background:#0d1117;color:#c9d1d9}
  #bar{padding:6px 10px;background:#161b22;border-bottom:1px solid #30363d;
       position:sticky;top:0;display:flex;gap:14px;align-items:center}
- #frames{display:flex;gap:4px}
+ #frames{display:flex;flex-direction:column;gap:4px}
  iframe{border:1px solid #30363d;background:#000}
  b{color:#ff6b35}
 </style>
@@ -56,7 +56,9 @@ async function setCount(f,n){
   $('#phase').textContent=ph.name;
   $('#frames').textContent='';
   const frames=[];
-  const w=ph.n.length>1?740:1180, h=ph.n.length>1?460:640;
+  /* 창을 나란히 놓으면 폭이 760px 아래로 떨어져 앱이 모바일 배치로 바뀐다.
+     PC 환경을 재는 것이므로 폭을 지키고 세로로 쌓는다. */
+  const w=1180, h=ph.n.length>1?430:640;
   for(let i=0;i<ph.n.length;i++){
     const f=await mkFrame(i>0, w, h);
     await sleep(4000);
