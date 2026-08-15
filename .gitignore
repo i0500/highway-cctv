@@ -4,3 +4,5 @@ admin.html
 accounts.json
 # 검증용 임시 하니스
 _*.html
+# 검수 하니스는 배포본에서 재야 사용자와 같은 환경이 된다
+!_soak.html

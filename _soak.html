@@ -1,0 +1,93 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow">
+<title>장시간 검수</title>
+<style>
+ body{margin:0;font:12px/1.5 system-ui;background:#0d1117;color:#c9d1d9}
+ #bar{padding:6px 10px;background:#161b22;border-bottom:1px solid #30363d;
+      position:sticky;top:0;display:flex;gap:14px;align-items:center}
+ #frames{display:flex;gap:4px}
+ iframe{border:1px solid #30363d;background:#000}
+ b{color:#ff6b35}
+</style>
+<div id="bar"><b id="phase">준비</b><span id="clock">0분</span><span id="note"></span></div>
+<div id="frames"></div>
+<script>
+/* 한 탭 안에서 앱을 iframe 으로 띄운다.
+   탭을 여러 개 쓰면 뒤로 간 탭이 절전으로 멈춰 측정이 무의미해진다.
+   구간마다 대수와 창 수를 바꿔 가며 오래 돌린 뒤 지표를 모은다. */
+const PHASES=[
+  {name:'단일창 5대',   subs:0, n:[5],    min:120},
+  {name:'단일창 20대',  subs:0, n:[20],   min:120},
+  {name:'멀티창 5+5',   subs:1, n:[5,5],  min:120},
+  {name:'멀티창 12+8',  subs:1, n:[12,8], min:120},
+];
+const RESULT={시작:new Date().toISOString(), 구간:[]};
+window.RESULT=RESULT; window.DONE=false;
+const $=s=>document.querySelector(s);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+function mkFrame(sub,w,h){
+  const f=document.createElement('iframe');
+  f.src='index.html'+(sub?'?sub=1&debug=0':'');
+  f.style.width=w+'px'; f.style.height=h+'px';
+  $('#frames').appendChild(f);
+  return new Promise(r=>{ f.onload=()=>r(f); });
+}
+async function setCount(f,n){
+  const W=f.contentWindow;
+  W.eval(`(function(n){
+    while(S.open.length>n) closeCam(S.open.length-1);
+    while(S.open.length<n){
+      const c=CAMS.find(c=>!S.open.some(o=>o.cam.n===c.n));
+      if(!c) break; openCam(c);
+    }
+  })(${n})`);
+}
+
+(async()=>{
+ for(const ph of PHASES){
+  $('#phase').textContent=ph.name;
+  $('#frames').textContent='';
+  const frames=[];
+  const w=ph.n.length>1?740:1180, h=ph.n.length>1?460:640;
+  for(let i=0;i<ph.n.length;i++){
+    const f=await mkFrame(i>0, w, h);
+    await sleep(4000);
+    f.contentWindow.eval('cctvDiag.reset()');
+    await setCount(f, ph.n[i]);
+    frames.push(f);
+  }
+  const t0=Date.now();
+  while(Date.now()-t0 < ph.min*60000){
+    await sleep(20000);
+    $('#clock').textContent=((Date.now()-t0)/60000).toFixed(1)+'분 / '+ph.min+'분';
+    try{ $('#note').textContent=frames.map(f=>{
+      const W=f.contentWindow, m=W.performance.memory;
+      return W.eval('S.open.length')+'대 '+(m?(m.usedJSHeapSize/1048576).toFixed(0)+'MB':'');
+    }).join('  |  '); }catch(e){ $('#note').textContent='읽기 실패 '+e; }
+    try{ localStorage.setItem('soak_live', JSON.stringify({구간:ph.name,
+      분:+((Date.now()-t0)/60000).toFixed(1),
+      창:frames.map(f=>{try{const W=f.contentWindow;
+        return {요약:W.cctvDiag(), 최근:W.eval('DBG.snaps.slice(-3)')};}catch(_){return null}})
+    })); }catch(e){}
+  }
+  // 구간 결과 수집
+  const got=frames.map((f,i)=>{
+    try{
+      const W=f.contentWindow;
+      return {창:i===0?'메인':'보조', 요약:W.cctvDiag(),
+              스냅:W.eval('DBG.snaps.slice()'),
+              화면:W.eval('S.open.map((o,k)=>diagRow(o,k))'),
+              사건:W.eval('DBG.buf.slice(-50)')};
+    }catch(e){ return {창:i, 오류:String(e)}; }
+  });
+  RESULT.구간.push({이름:ph.name, 분:ph.min, 결과:got});
+  try{ localStorage.setItem('soak_result', JSON.stringify(RESULT)); }catch(e){}
+  $('#frames').textContent='';
+  await sleep(3000);
+ }
+ window.DONE=true;
+ $('#phase').textContent='완료';
+})();
+</script>
