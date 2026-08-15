@@ -293,17 +293,17 @@ body.reimagined .cell .rf{top:auto;bottom:6px;right:38px;width:26px;height:26px;
 #grid.zoomed .gridrow.hasZoom{display:flex;flex:1 1 100%}
 #grid.zoomed .cell{display:none}
 #grid.zoomed .cell.zoom{display:block;flex:1 1 100%}
-.cell .mg{position:absolute;top:1px;right:70px;width:28px;height:24px;display:grid;
-  place-items:center;font-size:17px;font-weight:700;color:var(--dim);
-  background:transparent;z-index:3}
+.cell .mg{position:absolute;top:2px;right:72px;width:22px;height:20px;display:grid;
+  place-items:center;color:var(--dim);background:transparent;z-index:3}
+.cell .mg svg{width:14px;height:14px;display:block}
 .cell .mg:hover{color:var(--acc)}
 .cell.mag .mg{color:var(--acc)}
+body.reimagined .cell.mag .mg{background:rgba(255,107,53,.85);color:#fff}
 .cell .zm{position:absolute;top:2px;right:49px;width:22px;height:20px;display:grid;
   place-items:center;font-size:12px;color:var(--dim);background:transparent}
 .cell .zm:hover{color:var(--acc)}
-body.reimagined .cell .mg{top:auto;bottom:4px;right:100px;width:32px;height:32px;
-  background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.25);
-  border-radius:50%;color:#fff;font-size:17px;font-weight:700}
+body.reimagined .cell .mg{top:auto;bottom:6px;right:102px;width:26px;height:26px;
+  background:rgba(0,0,0,.5);border-radius:50%;color:#fff}
 body.reimagined .cell .zm{top:auto;bottom:6px;right:70px;width:26px;height:26px;
   background:rgba(0,0,0,.5);border-radius:50%;color:#fff}
 #grid.zoomed .cell.zoom .zm{color:var(--acc)}
@@ -394,14 +394,14 @@ body.classic .sheet-in{border:2px solid #888}
   #grid .cell .x{display:grid;top:auto;bottom:4px;right:auto;width:26px;height:26px;
     background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.2);
     border-radius:7px;color:#fff;font-size:13px}
-  #grid .cell .mg{left:5px;width:32px;height:32px;bottom:2px;font-size:17px;font-weight:700}
-  #grid .cell .zm{left:41px}
-  #grid .cell .rf{left:71px}
-  #grid .cell .x{left:101px}
+  #grid .cell .mg{left:5px}
+  #grid .cell .zm{left:35px}
+  #grid .cell .rf{left:65px}
+  #grid .cell .x{left:95px}
   /* 이름 뒤에만 옅게 깔아 어떤 배경에서도 읽히게 한다 — 글자 길이만큼만.
      버튼은 왼쪽, 이름은 오른쪽 끝에 붙인다 */
   #grid .cell .ttl{top:auto;bottom:4px;left:auto;right:5px;height:26px;
-    max-width:calc(100% - 137px);
+    max-width:calc(100% - 131px);
     display:flex;align-items:center;padding:0 7px;border:none;
     background:rgba(0,0,0,.42);border-radius:7px;
     font-size:11.5px;font-weight:700;color:#e7edf4;text-shadow:none;
@@ -414,7 +414,8 @@ body.classic .sheet-in{border:2px solid #888}
   #grid.zoomed .cell.zoom .zm,
   #grid.zoomed .cell.zoom .rf,
   #grid.zoomed .cell.zoom .x{width:38px;height:38px;font-size:17px;bottom:8px}
-  #grid.zoomed .cell.zoom .mg{width:44px;height:44px;font-size:21px;bottom:6px;left:8px}
+  #grid.zoomed .cell.zoom .mg{width:38px;height:38px;bottom:8px;left:8px}
+  #grid.zoomed .cell.zoom .mg svg{width:19px;height:19px}
   #grid.zoomed .cell.zoom .zm{left:52px}
   #grid.zoomed .cell.zoom .rf{left:96px}
   #grid.zoomed .cell.zoom .x{left:140px}
@@ -899,7 +900,9 @@ function makeCell(o){
   cell.className='cell';
   cell.innerHTML=`<video playsinline muted autoplay></video>
     <div class="ttl"><span class="no"></span><span class="nm"></span></div>
-    <button class="mg" data-mag="0" title="돋보기 (넘패드 +/−)"><span class="ic">＋</span></button>
+    <button class="mg" data-mag="0" title="돋보기 (넘패드 +/−)"><svg viewBox="0 0 20 20" aria-hidden="true">
+      <circle cx="8.5" cy="8.5" r="5.6" fill="none" stroke="currentColor" stroke-width="2"/>
+      <path d="M12.9 12.9 18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
     <button class="zm" data-zoom="0" title="크게 보기 (더블클릭)">⛶</button>
     <button class="rf" data-reload="0" title="이 화면만 다시 연결"><span class="ic">↻</span></button>
     <button class="x" data-close="0">✕</button>
@@ -957,7 +960,6 @@ function applyMag(o){
   if(!v) return;
   const on=o.mag>1;
   o.cell.classList.toggle('mag', on);
-  const ic=o.cell.querySelector('.mg .ic'); if(ic) ic.textContent = on ? '－' : '＋';
   if(!on) return;
   o.mx=Math.min(1,Math.max(0,o.mx ?? 0.5));
   o.my=Math.min(1,Math.max(0,o.my ?? 0.5));
