@@ -47,7 +47,6 @@ body.reimagined #side.closed{display:none}
 /* 목록이 열려 있을 때 뒤를 덮는 면 — 눌러서 닫는다 */
 #sideBackdrop{display:none;position:absolute;inset:0;z-index:55;background:rgba(0,0,0,.45)}
 #sideBackdrop.on{display:block}
-body.reimagined .vtab{display:none}
 body.reimagined #top{position:absolute;left:0;right:0;top:var(--st);z-index:40;
   background:linear-gradient(rgba(0,0,0,.72),transparent);border:none;padding:10px 12px 22px}
 body.reimagined .tbtn{background:var(--panel2);border:1px solid var(--line2);
@@ -169,14 +168,33 @@ body.modern .live.g{color:#3fb950} body.modern .live.y{color:#d29922} body.moder
 
 /* 본문 */
 #main{flex:1 1 auto;min-height:0;display:flex}
-#side{flex:0 0 auto;display:flex;background:var(--panel);border-right:1px solid var(--line2)}
+#side{flex:0 0 auto;width:252px;display:flex;flex-direction:column;min-width:0;
+  background:var(--panel);border-right:1px solid var(--line2)}
 body.classic #side{border-right:1px solid #999}
-.col{display:flex;flex-direction:column;width:190px;min-width:0}
-.col.hide{display:none}
-.colhead{display:flex;flex-direction:column;gap:4px;padding:6px}
-.colhead button{padding:10px;background:var(--panel2);border:1px solid var(--line2);
-  border-radius:var(--radius);min-height:40px;font-size:13.5px}
-body.classic .colhead button{border:1px solid #888;background:#D3D3D3}
+.mhead{flex:0 0 auto;display:flex;align-items:center;padding:0 6px 0 14px;height:46px;
+  border-bottom:1px solid var(--line2);font-size:13px;color:var(--dim);letter-spacing:.06em}
+.mhead span{flex:1}
+.mhead .close{width:38px;height:38px;font-size:16px;background:transparent;border:0;color:var(--dim)}
+.mhead .close:hover{background:var(--panel2);border-radius:8px;color:var(--fg)}
+/* 메뉴는 한 줄로 쌓이고, 펼친 항목만 남는 높이를 나눠 갖는다 */
+.mscroll{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow-y:auto}
+.mitem{flex:0 0 auto;display:flex;align-items:center;gap:8px;width:100%;
+  padding:0 14px;min-height:46px;background:transparent;border:0;
+  border-bottom:1px solid var(--line2);color:var(--fg);font-size:14px;text-align:left}
+.mitem>span{flex:1;min-width:0}
+.mitem:hover{background:var(--panel2)}
+.mitem .cnt{font-style:normal;font-size:11.5px;color:var(--dim);font-variant-numeric:tabular-nums}
+.mitem i{font-style:normal;font-size:11px;color:var(--dim);transition:transform .15s}
+.msec{flex:0 0 auto;display:flex;flex-direction:column;min-height:0}
+.msec.open{flex:1 1 auto}
+.msec.open>.mitem{background:var(--panel2);font-weight:700}
+.msec.open>.mitem i{transform:rotate(180deg)}
+.mbody{display:none}
+.msec.open>.mbody{display:flex;flex:1 1 auto;flex-direction:column;min-height:0}
+.msub{flex:0 0 auto;margin:7px 10px;padding:9px;background:var(--panel2);
+  border:1px solid var(--line2);border-radius:var(--radius);color:var(--fg);font-size:13px}
+body.classic .msub{border:1px solid #888;background:#D3D3D3}
+body.classic .mitem{border-bottom:1px solid #C8C8C8}
 .list{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch}
 /* 목록 두 칸에 브라우저 기본 막대가 밝게 떠서 화면 톤과 따로 놀았다.
    스킨 색을 따라가도록 얇게 다시 그린다. */
@@ -202,14 +220,6 @@ body.classic .item{border:1px solid #C8C8C8;border-width:0 0 1px 0}
 .item .star.on{color:#f0b429}
 .item.on .star{color:rgba(255,255,255,.7)}
 .item.on .star.on{color:#ffd75e}
-/* 세로 접기 탭 — 원본의 ┃고┃속┃도┃로┃ 재현 */
-.vtab{width:26px;background:var(--panel);border-left:1px solid var(--line);
-      border-right:1px solid var(--line);display:flex;flex-direction:column;
-      align-items:center;justify-content:center;cursor:pointer;gap:1px;font-size:12px;
-      user-select:none;flex:0 0 auto}
-body.modern .vtab{border-color:var(--line2)}
-.vtab:hover{background:var(--panel2)}
-.vtab span{line-height:1.15}
 
 /* 무대 */
 #stage{flex:1 1 auto;min-width:0;background:var(--stage);position:relative;overflow:hidden}
@@ -369,29 +379,17 @@ body.classic .sheet-in{border:2px solid #888}
   background:var(--panel2);font-size:13px;min-height:42px}
 .seg button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
 
-/* 좁은 화면 전용 목록 탭 (넓은 화면에서는 세로 탭을 쓰므로 숨김) */
-#listTabs{display:none}
-#listTabs button{flex:1;padding:12px 6px;font-size:14px;background:var(--panel2);
-  border:0;border-bottom:2px solid transparent;color:var(--dim);min-height:46px}
-#listTabs button.on{color:var(--fg);border-bottom-color:var(--acc);font-weight:700;
-  background:var(--panel)}
-#listTabs button.close{flex:0 0 52px;font-size:17px}
 
 /* ══════════════ 좁은 화면 ══════════════ */
 @media(max-width:760px){
   #main{position:relative}
   /* 목록은 화면을 거의 다 쓰는 오버레이로 — 좁은 칸에 두 목록을 욱여넣지 않는다 */
-  #side{position:absolute;left:0;top:0;bottom:0;width:min(92vw,420px);z-index:60;
-        flex-direction:column;border-right:1px solid var(--line2);
+  #side{position:absolute;left:0;top:0;bottom:0;width:min(88vw,360px);z-index:60;
         box-shadow:6px 0 22px rgba(0,0,0,.45)}
   #side.closed{display:none}
   #sideBackdrop{z-index:55}
-  #listTabs{display:flex}
-  .vtab{display:none}                     /* 세로 접기 탭은 좁은 화면에서 무의미 */
-  .col{width:100%;flex:1 1 auto;min-height:0}
-  .col.hide{display:none}
-  .colhead{flex-direction:row;flex-wrap:wrap}
-  .colhead button{flex:1 1 40%}
+  .mhead{height:54px}
+  .mitem{min-height:54px;font-size:15px}
   .item{min-height:50px;font-size:15px}
   .item .star{width:44px;height:44px;font-size:19px}   /* 손가락으로 누를 수 있게 */
   #stage{flex:1 1 auto}
@@ -501,28 +499,25 @@ body.classic .sheet-in{border:2px solid #888}
 
   <div id="main">
     <div id="sideBackdrop"></div>
+    <!-- ☰ 로 여는 메뉴 한 줄. 목록도 메뉴 항목이라 눌러서 펼친다. -->
     <div id="side">
-      <!-- 좁은 화면에서는 두 목록을 나란히 못 두므로 탭으로 하나씩 보여준다 -->
-      <div id="listTabs">
-        <button data-col="fav" class="on">즐겨찾기</button>
-        <button data-col="cam">전체 목록</button>
-        <button id="bCloseSide2" class="close">✕</button>
-      </div>
-      <div class="col" id="colFav">
-        <div class="colhead">
-          <button id="bCloseSide" style="display:none">✕ 목록 닫기</button>
-          <button id="bSetting2">설정</button>
-          <button id="bNoti">알림</button>
-          <button id="bAsk">문의하기</button>
-          <button id="bFavAll">즐겨찾기 전체 열기</button>
+      <div class="mhead"><span>메뉴</span><button id="bCloseSide2" class="close">✕</button></div>
+      <div class="mscroll">
+        <button class="mitem" id="bSetting2"><span>설정</span></button>
+        <button class="mitem" id="bNoti"><span>알림</span></button>
+        <button class="mitem" id="bAsk"><span>문의하기</span></button>
+        <div class="msec open" data-sec="fav">
+          <button class="mitem sec"><span>즐겨찾기</span><em class="cnt"></em><i>▾</i></button>
+          <div class="mbody">
+            <button class="msub" id="bFavAll">즐겨찾기 전체 열기</button>
+            <div class="list" id="favList"></div>
+          </div>
         </div>
-        <div class="list" id="favList"></div>
+        <div class="msec" data-sec="cam">
+          <button class="mitem sec"><span>전체 목록</span><em class="cnt"></em><i>▾</i></button>
+          <div class="mbody"><div class="list" id="camList"></div></div>
+        </div>
       </div>
-      <div class="vtab" id="tabFav" title="즐겨찾기 목록 접기/펼치기"></div>
-      <div class="col" id="colCam">
-        <div class="list" id="camList"></div>
-      </div>
-      <div class="vtab" id="tabCam" title="CCTV 목록 접기/펼치기"></div>
     </div>
 
     <div id="stage">
@@ -621,7 +616,7 @@ const S={
   active:0, skin:LS.get('skin','reimagined'), mode:LS.get('mode','live'),
   favs:LS.get('favs', DEFAULT_FAVS.length?DEFAULT_FAVS:CAMS.slice(0,12).map(c=>c.n)),
   fit:LS.get('fit',true), low:LS.get('low',false), save:LS.get('save',true),
-  sideOpen:true, colFav:true, colCam:true, zoom:-1
+  sideOpen:true, sec:LS.get('sec',{fav:true,cam:false}), zoom:-1
 };
 const MAX=20;
 
@@ -1283,6 +1278,7 @@ function renderLists(){
     : `<div style="padding:18px 14px;font-size:13px;line-height:1.7;color:var(--dim)">
          즐겨찾기가 비어 있습니다.<br>아래 <b>CCTV 목록</b>에서 ☆ 를 눌러 추가하세요.</div>`;
   $('#camList').innerHTML=CAMS.map((c,i)=>row(c,i)).join('');
+  syncSecCount();
   renderStrip();
 }
 function toggleFav(i){
@@ -1424,30 +1420,30 @@ function healTick(){
 }
 setInterval(healTick, 2000);
 
-/* ─────────── 세로 탭 (원본 재현) ─────────── */
-function vtabText(el,txt){ el.innerHTML=txt.split('').map(ch=>`<span>${ch===' '?'&nbsp;':ch}</span>`).join(''); }
-vtabText($('#tabFav'),'즐겨찾기 목록');
-vtabText($('#tabCam'),'CCTV 목록');
+/* ─────────── 메뉴 항목 펼치기 ───────────
+   목록도 메뉴의 한 항목이다 — 누르면 그 자리에서 펼쳐지고,
+   펼친 항목끼리 남는 높이를 나눠 가지며 각자 안에서 스크롤한다. */
 const narrow=()=>window.innerWidth<=760;
-$('#tabFav').onclick=()=>{S.colFav=!S.colFav;$('#colFav').classList.toggle('hide',!S.colFav);};
-$('#tabCam').onclick=()=>{S.colCam=!S.colCam;$('#colCam').classList.toggle('hide',!S.colCam);};
-
-/* 좁은 화면: 두 목록을 나란히 두면 각각이 너무 좁아 이름도 ★ 도 못 누른다.
-   탭으로 하나씩 전체 폭을 쓰게 한다. */
-function showCol(which){
-  S.listTab=which;
-  const nb=narrow();
-  $('#colFav').classList.toggle('hide', nb ? which!=='fav' : !S.colFav);
-  $('#colCam').classList.toggle('hide', nb ? which!=='cam' : !S.colCam);
-  $$('#listTabs button[data-col]').forEach(b=>b.classList.toggle('on',b.dataset.col===which));
+function setSec(which, open){
+  const el=$(`.msec[data-sec="${which}"]`); if(!el) return;
+  el.classList.toggle('open', open);
+  S.sec[which]=open; LS.set('sec', S.sec);
 }
-$$('#listTabs button[data-col]').forEach(b=>b.onclick=()=>showCol(b.dataset.col));
+$$('.msec>.mitem.sec').forEach(b=>{
+  const which=b.parentElement.dataset.sec;
+  b.onclick=()=>setSec(which, !b.parentElement.classList.contains('open'));
+});
+function syncSecCount(){
+  const f=CAMS.filter(c=>S.favs.includes(c.n)).length;
+  const q=(w,n)=>{const e=$(`.msec[data-sec="${w}"] .cnt`); if(e) e.textContent=n?n+'개':'';};
+  q('fav', f); q('cam', CAMS.length);
+}
 $('#bCloseSide2').onclick=()=>setSide(false);
 /* 칸이 많아 작아지면 버튼이 겹치므로 '빽빽함' 표시를 켜서 CSS 가 정리하게 한다 */
 function syncDense(){
   $('#grid').classList.toggle('dense', narrow() && S.open.length>4);
 }
-window.addEventListener('resize',()=>{ showCol(S.listTab||'fav'); syncDense(); setSide(S.sideOpen);
+window.addEventListener('resize',()=>{ syncDense(); setSide(S.sideOpen);
   S.open.forEach(o=>{ if(o.mag>1) applyMag(o); });   // 칸 크기가 바뀌면 돋보기 자리도 다시 잡는다
 });
 
@@ -1458,12 +1454,9 @@ function setSide(open){
   $('#side').classList.toggle('closed',!open);
   const overlay = S.skin==='reimagined' || narrow();
   $('#sideBackdrop').classList.toggle('on', open && overlay);
-  // 좁은 화면에는 탭 줄에 ✕ 가 있으므로 본문 버튼은 넓은 화면에서만 쓴다
-  $('#bCloseSide').style.display = (overlay && !narrow()) ? '' : 'none';
-  if(open) showCol(S.listTab||'fav');
 }
+setSec('fav', S.sec.fav!==false); setSec('cam', !!S.sec.cam);
 $('#bSide').onclick=()=>setSide(!S.sideOpen);
-$('#bCloseSide').onclick=()=>setSide(false);
 $('#sideBackdrop').onclick=()=>setSide(false);
 /* 기존 프로그램의 단축키를 그대로 옮긴다 —
    숫자 1~9 로 그 번호를 크게, 0 으로 전체 보기, Q 다시 연결, W/E 명암. */
