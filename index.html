@@ -121,6 +121,7 @@ button{background:none;border:none;cursor:pointer}
 /* 상단바 */
 /* 안 읽은 알림이 있으면 ☰ 에 붉은 점을 찍는다 */
 #bSide{position:relative}
+body.demo #bNoti{display:none}      /* 계정이 없으면 알림도 없다 */
 #bSide.has::after{content:"";position:absolute;top:3px;right:3px;width:8px;height:8px;
   border-radius:50%;background:#e2564a;box-shadow:0 0 0 2px var(--panel)}
 #notiWrap{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;
@@ -1722,7 +1723,17 @@ function showGate(msg){
   $('#gate').classList.remove('hide'); $('#app').classList.add('hide');
   if(msg){ const m=$('#gmsg'); m.textContent=msg; m.className='gmsg on'; }
 }
+/* 깃 페이지스에 올려 둔 것은 의뢰인이 계속 만져 볼 시험용이라 로그인을 두지 않는다.
+   계정·알림·운영비는 클라우드플레어에 올린 개발본에서만 돈다. */
+const DEMO = /\.github\.io$/.test(location.hostname);
+
 async function initGate(){
+  if(DEMO){
+    document.body.classList.add('demo');
+    if(await loadCams()) return false;              // 시험용 — 바로 연다
+    showGate('카메라 목록을 받지 못했습니다');
+    return true;
+  }
   if(TOKEN && await loadCams()){
     $('#gate').classList.add('hide'); $('#app').classList.remove('hide');
     return false;                                  // 이미 로그인된 상태
@@ -1932,7 +1943,11 @@ function start(){
   await loadScript(['https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js',
                     'https://unpkg.com/hls.js@1/dist/hls.min.js']);
   const needLogin=await initGate();
-  if(!needLogin){ $('#gate').classList.add('hide'); $('#app').classList.remove('hide'); start(); startHeartbeat(); loadNotices(); }
+  if(!needLogin){
+    $('#gate').classList.add('hide'); $('#app').classList.remove('hide');
+    start();
+    if(!DEMO){ startHeartbeat(); loadNotices(); }
+  }
 })();
 </script>
 </body>
