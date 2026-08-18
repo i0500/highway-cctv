@@ -43,7 +43,6 @@ body.reimagined{
 body.reimagined #main{position:relative}
 body.reimagined #side{position:absolute;left:0;top:0;bottom:0;z-index:60;
   background:rgba(10,11,14,.94);backdrop-filter:blur(14px);border-right:1px solid var(--line2)}
-body.reimagined #side.closed{display:none}
 /* 목록이 열려 있을 때 뒤를 덮는 면 — 눌러서 닫는다 */
 #sideBackdrop{display:none;position:absolute;inset:0;z-index:55;background:rgba(0,0,0,.45)}
 #sideBackdrop.on{display:block}
@@ -171,6 +170,10 @@ body.modern .live.g{color:#3fb950} body.modern .live.y{color:#d29922} body.moder
 #main{flex:1 1 auto;min-height:0;display:flex}
 #side{flex:0 0 auto;width:252px;display:flex;flex-direction:column;min-width:0;
   background:var(--panel);border-right:1px solid var(--line2)}
+/* 닫힘은 폭·스킨과 무관하게 한 곳에서 정한다.
+   전에는 재해석 스킨과 좁은 화면에만 있어서, 넓은 화면의 기존·개선 UI 에서는
+   ☰ 를 다시 눌러도 ✕ 를 눌러도 메뉴가 그대로 남아 있었다. */
+#side.closed{display:none}
 body.classic #side{border-right:1px solid #999}
 .mhead{flex:0 0 auto;display:flex;align-items:center;padding:0 6px 0 14px;height:46px;
   border-bottom:1px solid var(--line2);font-size:13px;color:var(--dim);letter-spacing:.06em}
@@ -389,7 +392,6 @@ body.classic .sheet-in{border:2px solid #888}
   /* 목록은 화면을 거의 다 쓰는 오버레이로 — 좁은 칸에 두 목록을 욱여넣지 않는다 */
   #side{position:absolute;left:0;top:0;bottom:0;width:min(88vw,360px);z-index:60;
         box-shadow:6px 0 22px rgba(0,0,0,.45)}
-  #side.closed{display:none}
   #sideBackdrop{z-index:55}
   .mhead{height:54px}
   .mitem{min-height:54px;font-size:15px}
