@@ -439,7 +439,8 @@ body.classic .sheet-in{border:2px solid #888}
     <div class="s">승인된 사용자만 이용할 수 있습니다</div>
     <form id="gform">
       <label>아이디</label>
-      <select id="gid" name="username" autocomplete="username"><option value="">—</option></select>
+      <input type="text" id="gid" name="username" autocomplete="username"
+             autocapitalize="off" spellcheck="false">
       <label>비밀번호</label>
       <input type="password" id="gpw" name="password" autocomplete="current-password">
       <button type="submit" class="gbtn" id="gbtn">로그인</button>
@@ -479,6 +480,7 @@ body.classic .sheet-in{border:2px solid #888}
         <div class="colhead">
           <button id="bCloseSide" style="display:none">✕ 목록 닫기</button>
           <button id="bSetting2">설정</button>
+          <button id="bAsk">문의하기</button>
           <button id="bFavAll">즐겨찾기 전체 열기</button>
         </div>
         <div class="list" id="favList"></div>
@@ -560,7 +562,7 @@ body.classic .sheet-in{border:2px solid #888}
    · 최우선 목표: 라이브에 최대한 가깝게
    ═══════════════════════════════════════════════════════════ */
 
-const CAMS = [{"n":"북천안","u":"https://live13.exmobile.hscdn.com/livehttp/Jd6I_XKuPt0zPMi-43D9F_NtBoTZvNE5QqmPGyLYwJs/playlist.m3u8"},{"n":"문덕육교","u":"https://live13.exmobile.hscdn.com/livehttp/YwYzKl69FtRixm2nLNI7snEFpBYzT9G-q60qL6mIA9I/playlist.m3u8"},{"n":"문덕","u":"https://live13.exmobile.hscdn.com/livehttp/NJAvNqm2YQw4te9pryadPdhyWfaVyFLcNzJmKm9Vh3c/playlist.m3u8"},{"n":"망향휴게소","u":"https://live13.exmobile.hscdn.com/livehttp/4bHCBtyKtWcBM4LHLWFAtrT4wCkBpTIe93I6A5nY8YU/playlist.m3u8"},{"n":"안서철육교(고정)","u":"https://live13.exmobile.hscdn.com/livehttp/EDplFz6Iu_h5D__kLD48XUkjvjK2FdCchWUYZx9GCKU/playlist.m3u8"},{"n":"안서철육교","u":"https://live13.exmobile.hscdn.com/livehttp/rYWAFzlHosYq137Ko1ygiz5RAEW3WMqP6SG5Or3QJo0/playlist.m3u8"},{"n":"하암육교","u":"https://live13.exmobile.hscdn.com/livehttp/tKmxkfMX-pNATm9hW7TleEBCmxx1hjXeqRb7z6T88D8/playlist.m3u8"},{"n":"천안","u":"https://live13.exmobile.hscdn.com/livehttp/onST0s1sWADb7-eAlMTSs0J7PU34KNXKQ_IWvyIgUnc/playlist.m3u8"},{"n":"신부","u":"https://live13.exmobile.hscdn.com/livehttp/Vqf6g-rCclwyt6GpVTSlBV3UJLkVi8bi-zIbFLxnvGE/playlist.m3u8"},{"n":"구성육교","u":"https://live13.exmobile.hscdn.com/livehttp/bL1dcNTSZZJVDeEUpHBVp5jzEqT2__WQGGo_HwyxbQs/playlist.m3u8"},{"n":"구성2교","u":"https://live13.exmobile.hscdn.com/livehttp/5sDYAwmasVaSIXLtKpX5ECLAUHcTeYL8tlj0B2IbNcc/playlist.m3u8"},{"n":"천삼휴게소","u":"https://live13.exmobile.hscdn.com/livehttp/6E-JBvWwoeLfdONJtuVlLBNOtRbVAPfhP72_nT7L15w/playlist.m3u8"},{"n":"천안분기점","u":"https://live13.exmobile.hscdn.com/livehttp/GO7UjjY47GShlHRjEjWcD-iV5hPMd2V_2gTF_Sm60q0/playlist.m3u8"},{"n":"응원","u":"https://live13.exmobile.hscdn.com/livehttp/v6AgIrJ11K5IzhXSqkAQofcocgQHfGs8ADyP4JMGp2A/playlist.m3u8"},{"n":"응원고개","u":"https://live13.exmobile.hscdn.com/livehttp/MiH3fwpnEomHm5D4mXTb7W5wsr4o2noZEOGnR27-0-c/playlist.m3u8"},{"n":"신계","u":"https://live13.exmobile.hscdn.com/livehttp/Zvbvr11woRYNaejuNTQVZR6aaDdWI24Kvw0mMHXhkxM/playlist.m3u8"},{"n":"용원","u":"https://live13.exmobile.hscdn.com/livehttp/j2oz9MGnlpy2KH8KFuRDV_PROGesDnybO6fhyV35zxA/playlist.m3u8"},{"n":"목천(고정)","u":"https://live13.exmobile.hscdn.com/livehttp/1NPT5vpzVNtOY-jgtJ_Ihz7uG2YGowfNFLqe35TI_qc/playlist.m3u8"},{"n":"목천","u":"https://live13.exmobile.hscdn.com/livehttp/Ivaqze2Hg3wrIMEOXUU-FMsCUsaR6tal_324yfM9mw8/playlist.m3u8"},{"n":"신사","u":"https://live13.exmobile.hscdn.com/livehttp/XvQZsqqp9xUPlpml1zBNkSZBmcQpjyCSC_ioVW7_xAM/playlist.m3u8"},{"n":"성남2","u":"https://live13.exmobile.hscdn.com/livehttp/tSGd4UySP5JQAghu9ypwszJ2RMZFjwl5AmTnnfkzf74/playlist.m3u8"},{"n":"성남1","u":"https://live13.exmobile.hscdn.com/livehttp/JpjJcAm28eRStx3W3zQm5n6qRG55uLEr8bvF7eECOsw/playlist.m3u8"},{"n":"대화","u":"https://live13.exmobile.hscdn.com/livehttp/9JuWxmUHoyDCMeDrlUvlxYdmY4qU9RAOYONPrJKzEMc/playlist.m3u8"},{"n":"천안호두휴게소","u":"https://live13.exmobile.hscdn.com/livehttp/Rqn6nK4GOVGHejA5_33QgfMihNceaCfwbtjCraBRb90/playlist.m3u8"},{"n":"감절교","u":"https://live13.exmobile.hscdn.com/livehttp/vlF5wBUDU1ZhgHg6v1X58Q5dPf4ovVDjPCu_vJK51rM/playlist.m3u8"},{"n":"속창육교","u":"https://live13.exmobile.hscdn.com/livehttp/Jj5Edot0wRSPqd12NzR2EzH8cxBCDDDoCL3HXf2B4j0/playlist.m3u8"},{"n":"병천2교","u":"https://live13.exmobile.hscdn.com/livehttp/3-pAxMMVLCWpj8-n10vbwo5A_T9ReeAyqM43KsoPTSc/playlist.m3u8"},{"n":"강정","u":"https://live13.exmobile.hscdn.com/livehttp/vhP1xjXTlny_vXilMWrbqncdEYyOJah9MB2G8lK1tOQ/playlist.m3u8"},{"n":"사정","u":"https://live13.exmobile.hscdn.com/livehttp/ysRvOriuKftk8GZDI30NYUqq0E9bbZbj1gPB8j6L5Kw/playlist.m3u8"},{"n":"청주휴게소","u":"https://live13.exmobile.hscdn.com/livehttp/wc3-YAKTtKOG3UE1y7wIUSaYM1barq1OK5i3R0o_KV8/playlist.m3u8"},{"n":"금계","u":"https://live13.exmobile.hscdn.com/livehttp/YjoTvyUcI7x8V0TS9OzXvLPfSjeX42GSklwgltqxNp8/playlist.m3u8"},{"n":"옥산분기점","u":"https://live13.exmobile.hscdn.com/livehttp/5KuQ45a7TlDbqIqL45hscH3yEl1fIgHnGrJaWhmYQN4/playlist.m3u8"},{"n":"수락","u":"https://live13.exmobile.hscdn.com/livehttp/5KuQ45a7TlDbqIqL45hscH3yEl1fIgHnGrJaWhmYQN4/playlist.m3u8"},{"n":"천수천교","u":"https://live13.exmobile.hscdn.com/livehttp/uuErAQlxIn1Aw2mZnDTgUH3KoTRyrA7s0pt6C2lzln8/playlist.m3u8"},{"n":"국사교","u":"https://live13.exmobile.hscdn.com/livehttp/fO7yq81pGRHjeoaTnw2aDiak_mCLwFQjj0xhdDEbry4/playlist.m3u8"},{"n":"몽단이고개","u":"https://live13.exmobile.hscdn.com/livehttp/_w9TRwXCgzvIm1MaslFQNXmfPBR5huOgowNtXqqpr8k/playlist.m3u8"},{"n":"가락","u":"https://live13.exmobile.hscdn.com/livehttp/Te_-ylVkQtCD99-SzNeU15-pFXLsKgkDuciHGJ_GP1o/playlist.m3u8"},{"n":"옥산휴게소","u":"https://live13.exmobile.hscdn.com/livehttp/W4VjefRpiOuzD-1ueEQTcA9YCAkZwTV8T-LLRJaI0ic/playlist.m3u8"},{"n":"옥산","u":"https://live13.exmobile.hscdn.com/livehttp/fGu-lyjAZesKowPrjlNhNfhn44iG44XpyspYIMY-2ys/playlist.m3u8"},{"n":"미호천교","u":"https://live13.exmobile.hscdn.com/livehttp/NTYK0TgvFNcx9qBXUEjuOX0yVvI_JmqvsIyzzO6pj44/playlist.m3u8"},{"n":"학천철육교","u":"https://live13.exmobile.hscdn.com/livehttp/Y4d1X2mEfahEi0Q3tmQufTbS44y8tUlumwmwmZA1dDI/playlist.m3u8"},{"n":"청주","u":"https://live13.exmobile.hscdn.com/livehttp/Z2TNXITQl7JwN4t2DrJIxpNhg2ianPLQUhYrTNWXAVY/playlist.m3u8"}];
+const CAMS = [];   // 로그인 후 서버에서 받아 채운다(주소를 소스에 두지 않는다)
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 /* 보조 창은 설정을 따로 쓴다 — 메인에 12개, 보조에 다른 4개 식으로 나눠 보기 위함.
@@ -1644,45 +1646,102 @@ setInterval(()=>{
   updateDiag();
 },500);
 
-/* ─────────── 로그인 (accounts.json 있을 때만) ─────────── */
-const encT=new TextEncoder(), decT=new TextDecoder();
-const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
-async function decryptKey(acc,pw,iter){
-  const base=await crypto.subtle.importKey('raw',encT.encode(pw),'PBKDF2',false,['deriveKey']);
-  const k=await crypto.subtle.deriveKey({name:'PBKDF2',salt:unb64(acc.salt),iterations:iter,hash:'SHA-256'},
-    base,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
-  return decT.decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(acc.iv)},k,unb64(acc.ct)));
+/* ─────────── 로그인 ───────────
+   계정과 카메라 목록은 서버가 쥐고 있다. 앱 소스에는 주소가 없다 —
+   로그인해서 받아와야 재생할 수 있다. */
+const AUTH = 'https://cctv-auth.snjdevs.workers.dev';
+let TOKEN = LS.get('tok', '') || '';
+
+/* 이 브라우저를 한 대로 센다(동시 접속 제한의 기준). 지우면 새 기기로 잡힌다. */
+function machineId(){
+  let m = LS.get('mid', '');
+  if(!m){ m = crypto.randomUUID().replace(/-/g,'').slice(0,24); LS.set('mid', m); }
+  return m;
 }
-let ACCTS=null;
-async function initGate(){
-  try{
-    const r=await fetch('accounts.json?_='+Date.now(),{cache:'no-store'});
-    if(!r.ok) throw 0;
-    ACCTS=await r.json();
-  }catch(_){ return false; }            // 계정 파일이 없으면 로그인 없이 사용
-  const today=new Date().toISOString().slice(0,10);
-  const ok=(ACCTS.accounts||[]).filter(a=>a.active!==false&&(!a.expires||a.expires>=today));
-  if(!ok.length) return false;
-  $('#gid').innerHTML=ok.map(a=>`<option value="${a.id}">${a.name||a.id}</option>`).join('');
-  const sess=LS.get('sess',null);
-  if(sess&&ok.some(a=>a.id===sess)) return false;   // 이미 로그인함
-  $('#gate').classList.remove('hide'); $('#app').classList.add('hide');
+async function authApi(path, body){
+  const r = await fetch(AUTH + path, {
+    method:'POST',
+    headers:{'content-type':'application/json', ...(TOKEN?{authorization:'Bearer '+TOKEN}:{})},
+    body: JSON.stringify(body||{})
+  });
+  return { status:r.status, data: await r.json().catch(()=>({ok:false,error:'bad_response'})) };
+}
+
+const LOGIN_ERR = {
+  invalid:'아이디 또는 비밀번호가 맞지 않습니다',
+  blocked:'로그인 시도가 많아 잠겼습니다',
+  disabled:'사용이 중지된 계정입니다',
+  expired:'사용 기간이 지났습니다',
+  in_use:'이미 다른 기기에서 사용 중입니다'
+};
+
+/* 카메라 목록을 받아 CAMS 를 채운다 */
+async function loadCams(){
+  const { data } = await authApi('/cams');
+  if(!data.ok || !data.cams?.length) return false;
+  CAMS.length = 0;
+  data.cams.forEach(c => CAMS.push({ n:c.n, u:c.u }));
   return true;
 }
-$('#gform').addEventListener('submit',async e=>{
+
+function showGate(msg){
+  $('#gate').classList.remove('hide'); $('#app').classList.add('hide');
+  if(msg){ const m=$('#gmsg'); m.textContent=msg; m.className='gmsg on'; }
+}
+async function initGate(){
+  if(TOKEN && await loadCams()){
+    $('#gate').classList.add('hide'); $('#app').classList.remove('hide');
+    return false;                                  // 이미 로그인된 상태
+  }
+  TOKEN=''; LS.del('tok');
+  showGate('');
+  return true;
+}
+$('#gform').addEventListener('submit', async e=>{
   e.preventDefault();
-  const acc=(ACCTS?.accounts||[]).find(a=>a.id===$('#gid').value);
-  if(!acc) return;
+  const btn=$('#gbtn'), m=$('#gmsg');
+  btn.disabled=true; m.textContent=''; m.className='gmsg';
   try{
-    await decryptKey(acc,$('#gpw').value,ACCTS.iterations||210000);
-    LS.set('sess',acc.id);
+    const { data } = await authApi('/auth/login', {
+      id: $('#gid').value.trim(), pw: $('#gpw').value, machine: machineId()
+    });
+    if(!data.ok){
+      m.textContent = (LOGIN_ERR[data.error] || '로그인할 수 없습니다')
+        + (data.left!=null ? ` (${data.left}회 남음)` : '');
+      m.className='gmsg on'; $('#gpw').value=''; return;
+    }
+    TOKEN = data.token; LS.set('tok', TOKEN);
+    if(!await loadCams()){ m.textContent='카메라 목록을 받지 못했습니다'; m.className='gmsg on'; return; }
+    $('#gpw').value='';
     $('#gate').classList.add('hide'); $('#app').classList.remove('hide');
     start();
+    startHeartbeat();
   }catch(_){
-    const m=$('#gmsg'); m.textContent='비밀번호가 올바르지 않습니다.'; m.className='gmsg on';
-    $('#gpw').value='';
-  }
+    m.textContent='서버에 연결하지 못했습니다'; m.className='gmsg on';
+  }finally{ btn.disabled=false; }
 });
+
+/* 세션 유지 — 끊기면(중지·기간 만료·관리자가 끊음) 곧바로 로그인 화면으로 돌아간다 */
+let hbTimer=null;
+function startHeartbeat(){
+  clearInterval(hbTimer);
+  hbTimer = setInterval(async ()=>{
+    if(document.visibilityState!=='visible') return;
+    const { status } = await authApi('/auth/heartbeat').catch(()=>({status:0}));
+    if(status===401){
+      clearInterval(hbTimer);
+      S.open.forEach(o=>{ if(o.hls){ try{o.hls.destroy()}catch(_){} } });
+      TOKEN=''; LS.del('tok');
+      showGate('접속이 종료되었습니다. 다시 로그인해 주세요.');
+    }
+  }, 240000);
+}
+
+/* 문의하기 — 텔레그램으로 연결한다.
+   t.me 주소는 앱이 깔려 있으면 앱 채팅창을, 없으면 웹 채팅을 연다(PC·휴대전화 모두). */
+$('#bAsk').onclick = ()=>{
+  window.open('https://t.me/dkdk747', '_blank', 'noopener');
+};
 
 /* ─────────── 시작 ─────────── */
 function loadScript(a){return new Promise(r=>{let i=0;(function n(){
@@ -1774,7 +1833,7 @@ function start(){
   await loadScript(['https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js',
                     'https://unpkg.com/hls.js@1/dist/hls.min.js']);
   const needLogin=await initGate();
-  if(!needLogin){ $('#gate').classList.add('hide'); $('#app').classList.remove('hide'); start(); }
+  if(!needLogin){ $('#gate').classList.add('hide'); $('#app').classList.remove('hide'); start(); startHeartbeat(); }
 })();
 </script>
 </body>
