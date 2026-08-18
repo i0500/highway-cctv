@@ -186,7 +186,9 @@ body.classic #side{border-right:1px solid #999}
 .mitem .cnt{font-style:normal;font-size:11.5px;color:var(--dim);font-variant-numeric:tabular-nums}
 .mitem i{font-style:normal;font-size:11px;color:var(--dim);transition:transform .15s}
 .msec{flex:0 0 auto;display:flex;flex-direction:column;min-height:0}
-.msec.open{flex:1 1 auto}
+/* 펼친 항목끼리 남는 높이를 고르게 나눈다.
+   max-content 를 상한으로 둬서 내용이 짧은 쪽은 제 높이만 쓰고 나머지를 넘긴다. */
+.msec.open{flex:1 1 0;max-height:max-content}
 .msec.open>.mitem{background:var(--panel2);font-weight:700}
 .msec.open>.mitem i{transform:rotate(180deg)}
 .mbody{display:none}

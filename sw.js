@@ -3,7 +3,7 @@
    토큰이 2시간마다 바뀌고, 계정 변경(차단)이 즉시 반영돼야 하기 때문. */
 /* 캐시 이름을 올리면 이전 캐시가 정리되고 새 파일을 받는다.
    앱을 고칠 때마다 숫자를 올릴 것 — 그래야 이미 설치한 사람도 최신을 받는다. */
-const CACHE = 'cctv-shell-v36';
+const CACHE = 'cctv-shell-v37';
 const SHELL = ['./', './index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', e => {
