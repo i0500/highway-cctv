@@ -137,6 +137,17 @@ button{background:none;border:none;cursor:pointer}
 #notiBox .it .t{display:flex;gap:8px;align-items:center;font-weight:700;font-size:13.5px}
 #notiBox .it .t span{margin-left:auto;font-size:11.5px;color:var(--dim);font-weight:400}
 #notiBox .it .b{margin-top:5px;font-size:13px;color:var(--dim);white-space:pre-wrap;line-height:1.6}
+/* 청구서는 읽는 글이 아니라 확인하는 표 — 금액을 먼저 보이게 세운다 */
+#notiBox .bill{margin-top:9px;border:1px solid var(--line2);border-radius:9px;overflow:hidden}
+#notiBox .bill .amt{padding:12px 14px;background:var(--panel2);border-bottom:1px solid var(--line2)}
+#notiBox .bill .amt b{display:block;font-size:23px;letter-spacing:-.5px;
+  font-variant-numeric:tabular-nums;color:var(--fg)}
+#notiBox .bill .amt i{font-style:normal;font-size:12px;color:var(--dim)}
+#notiBox .bill dl{margin:0;padding:4px 14px 11px}
+#notiBox .bill dl>div{display:flex;gap:10px;padding:6px 0;font-size:12.5px;align-items:baseline}
+#notiBox .bill dt{flex:0 0 62px;color:var(--dim)}
+#notiBox .bill dd{margin:0;flex:1;color:var(--fg);word-break:break-all}
+#notiBox .bill dd.due{font-weight:700}
 #notiBox .ft{flex:0 0 auto;display:flex;gap:8px;padding:12px 17px;border-top:1px solid var(--line2)}
 #notiBox .ft button{flex:1;padding:11px;background:var(--panel2);color:var(--fg);
   border:1px solid var(--line2);border-radius:8px;font-size:13.5px}
@@ -1792,11 +1803,24 @@ async function loadNotices(){
   const b=$('#bNoti');
   if(b) b.textContent = data.unread ? `알림 ${data.unread}` : '알림';
 }
+const esc = t => String(t||'').replace(/[<>&"]/g, c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+/* 청구서면 표로, 그 밖의 알림이면 본문 그대로 */
+function noticeInner(n){
+  let d=null; try{ d = n.data ? JSON.parse(n.data) : null; }catch(_){}
+  if(n.kind!=='bill' || !d) return `<div class="b">${esc(n.body)}</div>`;
+  return `<div class="bill">
+    <div class="amt"><b>${(d.amount||0).toLocaleString('ko-KR')}원</b>
+      <i>${esc(d.period)} 운영비 · 계정 ${d.accounts}개</i></div>
+    <dl>
+      <div><dt>납부 기한</dt><dd class="due">${esc(d.due)}</dd></div>
+      ${d.bank?`<div><dt>입금 계좌</dt><dd>${esc(d.bank)}</dd></div>`:''}
+    </dl></div>`;
+}
 function renderNotices(){
   $('#notiBody').innerHTML = NOTI.length ? NOTI.map(n=>
     `<div class="it ${n.read_at?'':'unread'}" data-n="${n.id}">
-       <div class="t">${n.title.replace(/[<>&]/g,'')}<span>${fmtNoti(n.ts)}</span></div>
-       <div class="b">${(n.body||'').replace(/[<>&]/g,'')}</div></div>`).join('')
+       <div class="t">${esc(n.title)}<span>${fmtNoti(n.ts)}</span></div>
+       ${noticeInner(n)}</div>`).join('')
     : '<div style="padding:34px;text-align:center;color:var(--dim)">받은 알림이 없습니다.</div>';
 }
 $('#bNoti') && ($('#bNoti').onclick = async ()=>{
