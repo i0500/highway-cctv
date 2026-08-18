@@ -576,6 +576,12 @@ body.classic .sheet-in{border:2px solid #888}
   </div>
 </div>
 
+<div id="notiWrap"><div id="notiBox">
+  <h3>알림</h3>
+  <div id="notiBody"></div>
+  <div class="ft"><button id="notiAll">모두 읽음</button><button class="pri" id="notiClose">닫기</button></div>
+</div></div>
+
 <script>
 /* ═══════════════════════════════════════════════════════════
    고속도로 CCTV 뷰어
@@ -1753,13 +1759,20 @@ function startHeartbeat(){
   hbTimer = setInterval(async ()=>{
     if(document.visibilityState!=='visible') return;
     const { status } = await authApi('/auth/heartbeat').catch(()=>({status:0}));
-    if(status===401){
-      clearInterval(hbTimer);
-      S.open.forEach(o=>{ if(o.hls){ try{o.hls.destroy()}catch(_){} } });
-      TOKEN=''; LS.del('tok');
-      showGate('접속이 종료되었습니다. 다시 로그인해 주세요.');
-    }
+    if(status===401) sessionEnded();
   }, 240000);
+}
+
+/* 다른 기기에서 밀려났거나 기간이 끝났다 — 재생을 멈추고 로그인으로 되돌린다.
+   심장박동(4분)과 알림 확인(2분) 중 먼저 눈치챈 쪽이 부른다. */
+function sessionEnded(){
+  if(!TOKEN) return;                          // 이미 처리했다
+  clearInterval(hbTimer); clearInterval(startHeartbeat._nt);
+  S.open.forEach(o=>{ if(o.hls){ try{o.hls.destroy()}catch(_){} } });
+  TOKEN=''; LS.del('tok');
+  $('#bSide').classList.remove('has');
+  $('#notiWrap').classList.remove('on');
+  showGate('접속이 종료되었습니다. 다시 로그인해 주세요.');
 }
 
 /* 알림 — 안 읽은 것이 있으면 ☰ 에 붉은 점.
@@ -1771,7 +1784,8 @@ function fmtNoti(ts){
 }
 async function loadNotices(){
   if(!TOKEN) return;
-  const { data } = await authApi('/notices').catch(()=>({data:{}}));
+  const { status, data } = await authApi('/notices').catch(()=>({status:0,data:{}}));
+  if(status===401){ sessionEnded(); return; }
   if(!data?.ok) return;
   NOTI = data.items || [];
   $('#bSide').classList.toggle('has', (data.unread||0) > 0);
@@ -1902,10 +1916,5 @@ function start(){
   if(!needLogin){ $('#gate').classList.add('hide'); $('#app').classList.remove('hide'); start(); startHeartbeat(); loadNotices(); }
 })();
 </script>
-<div id="notiWrap"><div id="notiBox">
-  <h3>알림</h3>
-  <div id="notiBody"></div>
-  <div class="ft"><button id="notiAll">모두 읽음</button><button class="pri" id="notiClose">닫기</button></div>
-</div></div>
 </body>
 </html>
