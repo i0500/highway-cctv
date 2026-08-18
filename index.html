@@ -120,6 +120,27 @@ button{background:none;border:none;cursor:pointer}
 #app.hide{display:none}
 
 /* 상단바 */
+/* 안 읽은 알림이 있으면 ☰ 에 붉은 점을 찍는다 */
+#bSide{position:relative}
+#bSide.has::after{content:"";position:absolute;top:3px;right:3px;width:8px;height:8px;
+  border-radius:50%;background:#e2564a;box-shadow:0 0 0 2px var(--panel)}
+#notiWrap{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;
+  align-items:center;justify-content:center;padding:18px;z-index:950}
+#notiWrap.on{display:flex}
+#notiBox{width:100%;max-width:460px;max-height:80vh;display:flex;flex-direction:column;
+  background:var(--bg);border:1px solid var(--line2);border-radius:var(--radius);overflow:hidden}
+#notiBox h3{margin:0;padding:15px 17px;font-size:15px;border-bottom:1px solid var(--line2)}
+#notiBody{flex:1 1 auto;overflow-y:auto}
+#notiBox .it{padding:13px 17px;border-bottom:1px solid var(--line2)}
+#notiBox .it:last-child{border-bottom:0}
+#notiBox .it.unread{background:var(--panel2)}
+#notiBox .it .t{display:flex;gap:8px;align-items:center;font-weight:700;font-size:13.5px}
+#notiBox .it .t span{margin-left:auto;font-size:11.5px;color:var(--dim);font-weight:400}
+#notiBox .it .b{margin-top:5px;font-size:13px;color:var(--dim);white-space:pre-wrap;line-height:1.6}
+#notiBox .ft{flex:0 0 auto;display:flex;gap:8px;padding:12px 17px;border-top:1px solid var(--line2)}
+#notiBox .ft button{flex:1;padding:11px;background:var(--panel2);color:var(--fg);
+  border:1px solid var(--line2);border-radius:8px;font-size:13.5px}
+#notiBox .ft button.pri{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700}
 #top{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--panel);
      border-bottom:1px solid var(--line2);flex:0 0 auto;flex-wrap:wrap}
 body.classic #top{border-bottom:1px solid #999}
@@ -480,6 +501,7 @@ body.classic .sheet-in{border:2px solid #888}
         <div class="colhead">
           <button id="bCloseSide" style="display:none">✕ 목록 닫기</button>
           <button id="bSetting2">설정</button>
+          <button id="bNoti">알림</button>
           <button id="bAsk">문의하기</button>
           <button id="bFavAll">즐겨찾기 전체 열기</button>
         </div>
@@ -1716,6 +1738,7 @@ $('#gform').addEventListener('submit', async e=>{
     $('#gate').classList.add('hide'); $('#app').classList.remove('hide');
     start();
     startHeartbeat();
+    loadNotices();
   }catch(_){
     m.textContent='서버에 연결하지 못했습니다'; m.className='gmsg on';
   }finally{ btn.disabled=false; }
@@ -1725,6 +1748,8 @@ $('#gform').addEventListener('submit', async e=>{
 let hbTimer=null;
 function startHeartbeat(){
   clearInterval(hbTimer);
+  clearInterval(startHeartbeat._nt);
+  startHeartbeat._nt = setInterval(()=>{ if(document.visibilityState==='visible') loadNotices(); }, 120000);
   hbTimer = setInterval(async ()=>{
     if(document.visibilityState!=='visible') return;
     const { status } = await authApi('/auth/heartbeat').catch(()=>({status:0}));
@@ -1736,6 +1761,47 @@ function startHeartbeat(){
     }
   }, 240000);
 }
+
+/* 알림 — 안 읽은 것이 있으면 ☰ 에 붉은 점.
+   운영비 산정 근거처럼 긴 내용이 오므로 모달에서 펼쳐 보여 준다. */
+let NOTI = [];
+function fmtNoti(ts){
+  const d=new Date(ts*1000), p=n=>String(n).padStart(2,'0');
+  return `${d.getMonth()+1}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+async function loadNotices(){
+  if(!TOKEN) return;
+  const { data } = await authApi('/notices').catch(()=>({data:{}}));
+  if(!data?.ok) return;
+  NOTI = data.items || [];
+  $('#bSide').classList.toggle('has', (data.unread||0) > 0);
+  const b=$('#bNoti');
+  if(b) b.textContent = data.unread ? `알림 ${data.unread}` : '알림';
+}
+function renderNotices(){
+  $('#notiBody').innerHTML = NOTI.length ? NOTI.map(n=>
+    `<div class="it ${n.read_at?'':'unread'}" data-n="${n.id}">
+       <div class="t">${n.title.replace(/[<>&]/g,'')}<span>${fmtNoti(n.ts)}</span></div>
+       <div class="b">${(n.body||'').replace(/[<>&]/g,'')}</div></div>`).join('')
+    : '<div style="padding:34px;text-align:center;color:var(--dim)">받은 알림이 없습니다.</div>';
+}
+$('#bNoti') && ($('#bNoti').onclick = async ()=>{
+  await loadNotices(); renderNotices();
+  $('#notiWrap').classList.add('on');
+  setSide(false);
+});
+$('#notiClose').onclick = ()=> $('#notiWrap').classList.remove('on');
+$('#notiWrap').onclick = e=>{ if(e.target.id==='notiWrap') $('#notiWrap').classList.remove('on'); };
+$('#notiAll').onclick = async ()=>{
+  await authApi('/notices/read', {});
+  await loadNotices(); renderNotices();
+};
+$('#notiBody').addEventListener('click', async e=>{
+  const it=e.target.closest('.it[data-n]'); if(!it||!it.classList.contains('unread')) return;
+  it.classList.remove('unread');
+  await authApi('/notices/read', { id: it.dataset.n });
+  loadNotices();
+});
 
 /* 문의하기 — 텔레그램으로 연결한다.
    t.me 주소는 앱이 깔려 있으면 앱 채팅창을, 없으면 웹 채팅을 연다(PC·휴대전화 모두). */
@@ -1833,8 +1899,13 @@ function start(){
   await loadScript(['https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js',
                     'https://unpkg.com/hls.js@1/dist/hls.min.js']);
   const needLogin=await initGate();
-  if(!needLogin){ $('#gate').classList.add('hide'); $('#app').classList.remove('hide'); start(); startHeartbeat(); }
+  if(!needLogin){ $('#gate').classList.add('hide'); $('#app').classList.remove('hide'); start(); startHeartbeat(); loadNotices(); }
 })();
 </script>
+<div id="notiWrap"><div id="notiBox">
+  <h3>알림</h3>
+  <div id="notiBody"></div>
+  <div class="ft"><button id="notiAll">모두 읽음</button><button class="pri" id="notiClose">닫기</button></div>
+</div></div>
 </body>
 </html>
